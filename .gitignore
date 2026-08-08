@@ -13,3 +13,5 @@ coverage/
 !.vscode/extensions.json
 apps/api/generated/
 *.tsbuildinfo
+CLAUDE.md
+

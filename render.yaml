@@ -3,15 +3,10 @@
 # `fromService` exposes internal host/port rather than the public URL, so the URL variables below
 # are filled in afterwards.
 
-databases:
-  - name: social-platform-db
-    databaseName: social_platform
-    user: social
-    # FREE TIER: expires 30 days after creation and takes the data with it. One free Postgres per
-    # Render workspace. For anything you intend to keep, change to `basic-256mb`.
-    plan: free
-    region: oregon
-    postgresMajorVersion: "16"
+# Postgres is Supabase, not Render — Render's free database is deleted 30 days after creation.
+# There is no `databases:` block here on purpose; DATABASE_URL is pasted in as a secret.
+# See docs/DEPLOYMENT.md for which of Supabase's three connection strings to use (it is not the
+# obvious one).
 
 services:
   # ---------------------------------------------------------------- Redis (BullMQ) ----
@@ -49,10 +44,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Supabase → Connect → **Session pooler**, host aws-N-<region>.pooler.supabase.com, port 5432,
+      # user postgres.<project-ref>. Not the "Direct connection" string: that host is IPv6-only and
+      # Render dials out over IPv4, so it fails with ENETUNREACH. Not the transaction pooler
+      # (:6543) either — the entrypoint's `prisma migrate deploy` takes a session-scoped advisory
+      # lock and runs DDL, neither of which survives transaction pooling.
       - key: DATABASE_URL
-        fromDatabase:
-          name: social-platform-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
         fromService:
           type: keyvalue

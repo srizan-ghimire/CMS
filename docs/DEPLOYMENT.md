@@ -1,7 +1,7 @@
 # Deployment
 
-Target stack: **Render** (API + web + Postgres + Redis) and **Cloudflare R2** (media), with
-**Resend** for outbound mail.
+Target stack: **Render** (API + web + Redis), **Supabase** (Postgres) and **Cloudflare R2** (media),
+with **Resend** for outbound mail.
 
 The blueprint is [`render.yaml`](../render.yaml) at the repo root.
 
@@ -76,6 +76,7 @@ Switching between them later is an env change plus a **rebuild** of the web serv
 - A GitHub repo Render can watch.
 - A Render account. The blueprint deploys entirely on free plans; read
   [Render's free tier](#renders-free-tier) for what that costs you.
+- A [Supabase](https://supabase.com) project for Postgres — see [step 3](#3-supabase-postgres).
 - A Cloudflare account (R2 has a free tier that is genuinely usable).
 - A domain, if you want option A, TikTok photo posts, or a production-grade media origin.
 - A [Resend](https://resend.com) account with a verified sending domain.
@@ -93,7 +94,46 @@ every existing `SocialAccount` token undecryptable — accounts must be reconnec
 The blueprint uses `generateValue: true` for the three auth secrets but deliberately **not** for
 `ENCRYPTION_KEY`: Render emits base64, and the config schema requires hex.
 
-## 3. Cloudflare R2
+## 3. Supabase (Postgres)
+
+Render's own free Postgres is deleted 30 days after creation, so the blueprint has no `databases:`
+block — `DATABASE_URL` is a `sync: false` secret you paste in.
+
+1. Create a project. Pick the region closest to Render's — `oregon` in the blueprint, so
+   **West US (Oregon)**. Save the database password Supabase shows you once.
+2. Supabase Dashboard → **Connect**. You are offered three strings. Take the **Session pooler** one:
+
+```
+postgresql://postgres.<project-ref>:<password>@aws-1-us-west-1.pooler.supabase.com:5432/postgres
+```
+
+Note the username is `postgres.<project-ref>`, not `postgres`, and the host is the `pooler.` one.
+URL-encode the password if it contains `@ : / ? # [ ] %`.
+
+**The other two strings do not work here, for two different reasons:**
+
+| String | Why not |
+|---|---|
+| Direct connection — `db.<ref>.supabase.co:5432` | IPv6-only. Render dials out over IPv4, so every connection fails with `ENETUNREACH`. IPv4 is a paid Supabase add-on. |
+| Transaction pooler — `...pooler.supabase.com:6543` | The entrypoint runs `prisma migrate deploy`, which takes a **session-scoped** advisory lock and runs DDL. Transaction pooling hands each statement a different backend, so the lock is released underneath the migration. Prisma also needs `?pgbouncer=true` there to stop using prepared statements. |
+
+Session mode is a full Postgres session over IPv4 — advisory locks, prepared statements and DDL all
+behave normally, and Prisma needs no connection-string flags. The free tier allows far more session
+connections than a single API instance opens.
+
+> If you later run several API instances, or move to serverless, switch runtime traffic to the
+> transaction pooler and give Prisma a separate `directUrl` for migrations. That means adding
+> `directUrl = env("DIRECT_URL")` to the `datasource` block in `schema.prisma` **and** adding
+> `DIRECT_URL` to `envSchema` in `configuration.ts` — an unregistered variable throws at startup.
+
+3. Nothing else to configure. The first API deploy runs the migrations, which create the schema
+   along with `pg_trgm` and `unaccent`.
+
+> **Supabase free projects pause after 7 days with no activity.** A paused project refuses
+> connections, so the API's `/health` check fails and the service will not come up until you resume
+> it from the dashboard. It does not delete your data — unlike Render's free Postgres.
+
+## 4. Cloudflare R2
 
 1. **Create a bucket**, e.g. `social-platform-media`.
 2. **Create an API token** — R2 → Manage API Tokens → *Object Read & Write*, scoped to that bucket.
@@ -140,7 +180,7 @@ Then the variables:
 `StubPublisher` and posts are recorded as published without ever leaving the building — so the API
 **refuses to start** in production without it.
 
-## 4. Resend
+## 5. Resend
 
 Verify your sending domain, create an API key, then:
 
@@ -156,14 +196,14 @@ SMTP_FROM=no-reply@example.com
 Signup is gated by `requireEmailVerification: true`, so a broken transport means nobody can create
 an account. The config schema rejects a loopback `SMTP_HOST` in production for that reason.
 
-## 5. Deploy the blueprint
+## 6. Deploy the blueprint
 
 Render assigns hostnames only after the first deploy, and `fromService` exposes internal host/port
 rather than public URLs — so this takes two passes.
 
 **Pass 1.** Push `render.yaml`, then Render Dashboard → New → Blueprint → pick the repo. Fill in the
-`sync: false` prompts you already know (R2, Resend, `ENCRYPTION_KEY`). Leave the URL variables
-blank for now. Apply.
+`sync: false` prompts you already know (`DATABASE_URL`, R2, Resend, `ENCRYPTION_KEY`). Leave the URL
+variables blank for now. Apply.
 
 **Pass 2.** Note the two assigned URLs, then on the **API** service set `API_URL`, `WEB_URL`,
 `BETTER_AUTH_URL`, `TRUSTED_ORIGINS`, and `AUTH_COOKIE_DOMAIN` per your chosen topology. On the
@@ -181,7 +221,7 @@ plan you can move this to `preDeployCommand` and set `RUN_MIGRATIONS_ON_BOOT=fal
 Render → service → Settings → Custom Domains. Point `app.example.com` at the web service and
 `api.example.com` at the API, update the four URL variables, then rebuild web.
 
-## 6. Meta app (Facebook **and** Instagram)
+## 7. Meta app (Facebook **and** Instagram)
 
 1. developers.facebook.com → Create App → **Business**.
 2. Add products: **Facebook Login** and **Instagram Graph API**.
@@ -202,7 +242,7 @@ Scopes requested by the provider: `pages_show_list`, `pages_read_engagement`, `p
 verification**, which takes days to weeks. Until then the app works in Development Mode for any
 account holding a role on it — do the first end-to-end test with a tester account.
 
-## 6b. Google / GitHub sign-in (optional)
+## 7b. Google / GitHub sign-in (optional)
 
 This is user *login*, unrelated to connecting social accounts for publishing. It is entirely
 optional: a provider is registered only when its client ID is set, and the sign-in page asks
@@ -224,7 +264,7 @@ reaches Better Auth on — not necessarily `API_URL`:
 
 Users arriving this way skip email verification — the provider has already proven the address.
 
-## 7. TikTok app
+## 8. TikTok app
 
 1. developers.tiktok.com → Manage apps → your app → add **Login Kit** and **Content Posting API**.
 2. Login Kit (Web) → Redirect URI:
@@ -278,6 +318,10 @@ Work through these in order — each one proves a distinct piece of the configur
 | Social sign-in buttons never appear | Working as intended — those providers have no credentials set. Check `GET /api/v1/auth/providers`. |
 | Scheduled posts never fire | The API instance is spun down, or Key Value `maxmemoryPolicy` is not `noeviction`. |
 | Migration half-applied (`P3009`) | Usually the tsvector generated columns — see the `@default(dbgenerated())` note in `CLAUDE.md`. |
+| `ENETUNREACH` / `Can't reach database server` on a Supabase URL | You used the Direct connection string. It is IPv6-only; Render is IPv4. Switch to the session pooler host. |
+| Deploy hangs or times out during `prisma migrate deploy` | `DATABASE_URL` points at the transaction pooler (`:6543`). Migrations need session mode (`:5432` on the pooler host). |
+| API healthy for a week, then every deploy fails to connect | The free Supabase project auto-paused after 7 days idle. Resume it from the Supabase dashboard. |
+| `operator class "gin_trgm_ops" does not exist` | `pg_trgm` resolved into Supabase's `extensions` schema and it is not on the search path. `CREATE EXTENSION pg_trgm WITH SCHEMA public;` in the SQL editor, then redeploy. |
 
 ## Render's free tier
 
@@ -290,7 +334,7 @@ configurable away — the only fix is upgrading the plan named in the table.
 | Web services spin down after 15 min idle | First request after a sleep waits ~30–60s on a Docker cold start | `plan: starter` on the service |
 | BullMQ does not run while asleep | **Scheduled posts fire late or not at all.** Publish-now still works, because the request itself wakes the instance | `plan: starter` on the API |
 | Cold start can exceed the 10-min `OAuthState` TTL | "Connect account" occasionally fails mid-redirect and needs a retry | `plan: starter` on the API |
-| Free Postgres expires 30 days after creation | The database and its data are deleted. One free Postgres per workspace | `plan: basic-256mb` |
+| Postgres is Supabase, not Render | Avoids Render's free database being deleted at 30 days. In exchange, a free Supabase project **pauses after 7 days idle** and must be resumed by hand before the API can boot | Supabase Pro |
 | Free Key Value is 25 MB with no persistence | The keyspace is wiped on every restart and deploy, taking queued jobs with it. Posts stay `SCHEDULED` in Postgres so they can be re-scheduled by hand, but nothing replays automatically | `plan: starter` |
 | 750 free instance-hours/month, shared across all free web services | Two always-on free services would exhaust it mid-month. Letting them sleep is what keeps this inside the allowance — so don't point an uptime pinger at both | — |
 | No `preDeployCommand` (paid only) | None — migrations already run from the container entrypoint, which is why `RUN_MIGRATIONS_ON_BOOT=true` | — |
