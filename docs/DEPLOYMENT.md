@@ -74,7 +74,8 @@ Switching between them later is an env change plus a **rebuild** of the web serv
 ## 1. Prerequisites
 
 - A GitHub repo Render can watch.
-- A Render account. **Not the free tier** — see [Free tier](#a-note-on-rendes-free-tier) below.
+- A Render account. The blueprint deploys entirely on free plans; read
+  [Render's free tier](#renders-free-tier) for what that costs you.
 - A Cloudflare account (R2 has a free tier that is genuinely usable).
 - A domain, if you want option A, TikTok photo posts, or a production-grade media origin.
 - A [Resend](https://resend.com) account with a verified sending domain.
@@ -278,15 +279,25 @@ Work through these in order — each one proves a distinct piece of the configur
 | Scheduled posts never fire | The API instance is spun down, or Key Value `maxmemoryPolicy` is not `noeviction`. |
 | Migration half-applied (`P3009`) | Usually the tsvector generated columns — see the `@default(dbgenerated())` note in `CLAUDE.md`. |
 
-## A note on Render's free tier
+## Render's free tier
 
-Three separate problems make it unsuitable here:
+`render.yaml` ships with every service on `plan: free`, so a Blueprint deploy needs no payment
+method on file. That buys a genuine demo deployment, and costs the following. None of it is
+configurable away — the only fix is upgrading the plan named in the table.
 
-- **No `preDeployCommand`** (paid only). The entrypoint approach works around this.
-- **15-minute spin-down.** A cold start during a Facebook redirect can outlive the 10-minute
-  `OAuthState` TTL, and BullMQ scheduled publishes simply do not fire while the instance is asleep.
-  Scheduled publishing effectively requires a paid API instance.
-- **Free Postgres expires after 30 days**, taking the data with it.
+| Limit | Effect here | Upgrade |
+|---|---|---|
+| Web services spin down after 15 min idle | First request after a sleep waits ~30–60s on a Docker cold start | `plan: starter` on the service |
+| BullMQ does not run while asleep | **Scheduled posts fire late or not at all.** Publish-now still works, because the request itself wakes the instance | `plan: starter` on the API |
+| Cold start can exceed the 10-min `OAuthState` TTL | "Connect account" occasionally fails mid-redirect and needs a retry | `plan: starter` on the API |
+| Free Postgres expires 30 days after creation | The database and its data are deleted. One free Postgres per workspace | `plan: basic-256mb` |
+| Free Key Value is 25 MB with no persistence | The keyspace is wiped on every restart and deploy, taking queued jobs with it. Posts stay `SCHEDULED` in Postgres so they can be re-scheduled by hand, but nothing replays automatically | `plan: starter` |
+| 750 free instance-hours/month, shared across all free web services | Two always-on free services would exhaust it mid-month. Letting them sleep is what keeps this inside the allowance — so don't point an uptime pinger at both | — |
+| No `preDeployCommand` (paid only) | None — migrations already run from the container entrypoint, which is why `RUN_MIGRATIONS_ON_BOOT=true` | — |
+
+Everything outside Render is unchanged: R2, Resend and the Meta/TikTok apps all have usable free
+tiers, and the API still refuses to boot in production without `MEDIA_PUBLIC_BASE_URL`, SMTP
+credentials and a 64-hex-character `ENCRYPTION_KEY`.
 
 ## Operations
 
