@@ -1,0 +1,915 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth (Better Auth compatible core tables)
+// ---------------------------------------------------------------------------
+
+model User {
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  emailVerified    Boolean   @default(false)
+  image            String?
+  twoFactorEnabled Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  sessions        Session[]
+  accounts        Account[]
+  twoFactors      TwoFactor[]
+  memberships     WorkspaceMember[]
+  ownedWorkspaces Workspace[]        @relation("WorkspaceOwner")
+  postsAuthored   Post[]             @relation("PostAuthor")
+  postsUpdated    Post[]             @relation("PostUpdatedBy")
+  tagsCreated     Tag[]
+  campaignsCreated Campaign[]
+  templatesCreated PostTemplate[]
+  snippetsCreated Snippet[]
+  invitationsSent WorkspaceInvitation[] @relation("InvitationSender")
+  postApprovals   PostApproval[]
+  approvalsRequested PostApproval[] @relation("ApprovalRequestedBy")
+  postVersions    PostVersion[]  @relation("PostVersionEditor")
+  commentsResolved Comment[]     @relation("CommentResolvedBy")
+  comments        Comment[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  mediaAssets     MediaAsset[]
+  connectedSocialAccounts SocialAccount[] @relation("SocialAccountConnectedBy")
+
+  @@index([email])
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  ipAddress  String?
+  userAgent  String?
+  deviceName String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// OAuth-linked identities (Google, GitHub) AND the credential (email/password) record —
+// Better Auth stores the password hash here, on the "credential" provider's account row,
+// rather than on User.
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String // "credential" | "google" | "github"
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// Email verification / password reset / OTP tokens
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// Added by the Better Auth twoFactor plugin
+model TwoFactor {
+  id          String @id @default(cuid())
+  secret      String
+  backupCodes String
+  userId      String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("two_factors")
+}
+
+// ---------------------------------------------------------------------------
+// Workspaces & RBAC
+// ---------------------------------------------------------------------------
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MANAGER
+  EDITOR
+  VIEWER
+}
+
+model Workspace {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  logoUrl   String?
+  ownerId   String
+  planId    String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  owner          User               @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  plan           Plan?              @relation(fields: [planId], references: [id])
+  members        WorkspaceMember[]
+  socialAccounts SocialAccount[]
+  posts          Post[]
+  mediaFolders   MediaFolder[]
+  mediaAssets    MediaAsset[]
+  tags           Tag[]
+  campaigns      Campaign[]
+  postTemplates  PostTemplate[]
+  snippets       Snippet[]
+  approvalPolicy ApprovalPolicy?
+  invitations    WorkspaceInvitation[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@index([ownerId])
+  @@map("workspaces")
+}
+
+// Pending invitations. `WorkspaceMember.invitedBy` has existed since Phase 1 as a bare string with
+// no invitation record behind it, and NotificationType.WORKSPACE_INVITE had nothing to fire on.
+model WorkspaceInvitation {
+  id          String        @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole @default(EDITOR)
+  // Opaque single-use token delivered by email; the accept route is anonymous and recovers all
+  // context from this row, exactly like OAuthState does for the social connect flow.
+  token       String        @unique @default(cuid())
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User?     @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, email])
+  @@index([email])
+  @@index([expiresAt])
+  @@map("workspace_invitations")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(EDITOR)
+  invitedBy   String?
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+// ---------------------------------------------------------------------------
+// Billing (minimal — extended in later phases)
+// ---------------------------------------------------------------------------
+
+model Plan {
+  id            String      @id @default(cuid())
+  name          String      @unique
+  priceMonthly  Int // cents
+  postLimit     Int
+  seatLimit     Int
+  socialLimit   Int
+  createdAt     DateTime    @default(now())
+
+  workspaces Workspace[]
+
+  @@map("plans")
+}
+
+// ---------------------------------------------------------------------------
+// Social connections
+// ---------------------------------------------------------------------------
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  LINKEDIN
+  TWITTER
+  THREADS
+  PINTEREST
+  YOUTUBE
+}
+
+enum SocialAccountStatus {
+  CONNECTED
+  TOKEN_EXPIRED
+  REVOKED
+  ERROR
+}
+
+model SocialAccount {
+  id                  String               @id @default(cuid())
+  workspaceId         String
+  platform            SocialPlatform
+  externalAccountId   String
+  displayName         String
+  handle              String?
+  avatarUrl           String?
+  status              SocialAccountStatus  @default(CONNECTED)
+  encryptedAccessToken  String
+  encryptedRefreshToken String?
+  tokenExpiresAt      DateTime?
+  scopes              String[]
+  // Provider-specific extras that don't deserve their own columns — e.g. the Facebook Page ID
+  // backing an Instagram connection (publishing goes through the Page token), category, etc.
+  metadata            Json?
+  lastValidatedAt     DateTime?
+  lastErrorMessage    String?
+  connectedById       String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedBy User?        @relation("SocialAccountConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+  postTargets PostTarget[]
+
+  @@unique([workspaceId, platform, externalAccountId])
+  @@index([workspaceId])
+  @@index([status, tokenExpiresAt])
+  @@map("social_accounts")
+}
+
+// Short-lived row backing the OAuth authorization-code + PKCE handshake. Persisted (rather than
+// a signed cookie) so the flow survives the redirect to Facebook/TikTok's domain and back, and so
+// the callback — which runs unauthenticated, since it's an external redirect — can recover which
+// user/workspace initiated the connection without trusting anything the provider sends us besides
+// the opaque `state` value.
+model OAuthState {
+  id           String         @id @default(cuid())
+  state        String         @unique
+  platform     SocialPlatform
+  workspaceId  String
+  userId       String
+  codeVerifier String? // PKCE — required by TikTok, unused by Facebook
+  redirectPath String         @default("/settings/connections")
+  expiresAt    DateTime
+  createdAt    DateTime       @default(now())
+
+  @@index([expiresAt])
+  @@map("oauth_states")
+}
+
+// ---------------------------------------------------------------------------
+// Content: posts, scheduling, targets
+// ---------------------------------------------------------------------------
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  PARTIALLY_PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+model Post {
+  id           String     @id @default(cuid())
+  workspaceId  String
+  authorId     String
+  // Internal label. Without it a drafts list is a wall of truncated body text — the title is
+  // never published, it only names the piece of content.
+  title        String?
+  // Plain text: the source of truth for publishing AND for the search vector (Stage 3).
+  content      String
+  // The TipTap document, so the editor can round-trip links/mentions/formatting losslessly.
+  // Social APIs only ever receive `content`. See lib/content-serializer.ts.
+  contentJson  Json?
+  // The "hashtags in the first comment" pattern. Near-free to add now, expensive to retrofit.
+  firstComment String?
+  status       PostStatus @default(DRAFT)
+  timezone     String     @default("UTC")
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+  // RFC-5545 RRULE. Occurrences are MATERIALIZED into fresh Post rows rather than one row
+  // republishing itself — a single row can only carry one publishedAt, one set of targets and one
+  // analytics identity, which is useless across N occurrences.
+  recurrenceRule String?
+  recurrenceParentId String?
+  recurrenceEndsAt DateTime?
+  recurrenceCount  Int?
+  // Denormalized pointer to the latest PostVersion.versionNumber, so listing N posts doesn't
+  // need N subqueries just to show "v4".
+  currentVersion Int      @default(1)
+  // Bumped whenever content changes while PENDING_APPROVAL, which invalidates prior approvals —
+  // otherwise a reviewer's sign-off would silently carry over to text they never saw.
+  approvalRound Int       @default(1)
+  updatedById  String?
+  campaignId   String?
+  createdFromTemplateId String?
+  // Postgres full-text index. Declared Unsupported so Prisma leaves the column alone: it is a
+  // GENERATED ... STORED column created in a hand-written migration, and Prisma can neither
+  // express nor write it. See that migration for why tags are NOT part of the vector.
+  // @default(dbgenerated()) tells Prisma the database owns this column's value. Without it,
+  // every subsequent `migrate diff` emits ALTER COLUMN ... DROP DEFAULT, which Postgres
+  // rejects on a generated column ("use DROP EXPRESSION instead") and the migration dies.
+  searchVector Unsupported("tsvector")? @default(dbgenerated())
+  // Archive is a CMS concept and is deliberately distinct from `deletedAt` soft-delete:
+  // archived content is intentionally kept and findable, deleted content is on its way out.
+  archivedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author     User           @relation("PostAuthor", fields: [authorId], references: [id])
+  updatedBy  User?          @relation("PostUpdatedBy", fields: [updatedById], references: [id])
+  campaign   Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  template   PostTemplate?  @relation(fields: [createdFromTemplateId], references: [id], onDelete: SetNull)
+  tags       PostTag[]
+  recurrenceParent Post?  @relation("PostRecurrence", fields: [recurrenceParentId], references: [id], onDelete: SetNull)
+  recurrenceChildren Post[] @relation("PostRecurrence")
+  media      PostMedia[]
+  targets    PostTarget[]
+  versions   PostVersion[]
+  approvals  PostApproval[]
+  comments   Comment[]
+
+  @@index([workspaceId, status])
+  @@index([scheduledAt])
+  @@index([workspaceId, deletedAt, status, updatedAt])
+  @@index([campaignId])
+  // Declared so `migrate diff` doesn't propose dropping the GIN index created in the
+  // organization_layer migration. `map:` must match the name used there.
+  @@index([searchVector], type: Gin, map: "posts_search_vector_idx")
+  @@map("posts")
+}
+
+// Replaces the former `Post.mediaAssetIds String[]`. An array had no foreign key (deleting an
+// asset left dangling ids), no per-item metadata, and encoded carousel order only implicitly.
+model PostMedia {
+  id           String   @id @default(cuid())
+  postId       String
+  mediaAssetId String
+  // Carousel sequence is meaningful to every platform, so ordering is explicit.
+  position     Int
+  createdAt    DateTime @default(now())
+
+  post  Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id])
+
+  @@unique([postId, mediaAssetId])
+  @@index([postId, position])
+  @@map("post_media")
+}
+
+enum PostTargetStatus {
+  PENDING
+  QUEUED
+  PUBLISHING
+  PUBLISHED
+  RETRYING
+  FAILED
+  CANCELLED
+  // Validation failed for this platform only. Distinct from FAILED so a partial publish reads as
+  // "we didn't try" rather than "we tried and it broke".
+  SKIPPED
+}
+
+model PostTarget {
+  id              String            @id @default(cuid())
+  postId          String
+  socialAccountId String
+  status          PostTargetStatus  @default(PENDING)
+  // Per-platform overrides — "same idea, LinkedIn voice". NULL means inherit the post's content,
+  // which is the common case; this is the core CMS feature of the composer.
+  contentOverride     String?
+  contentJsonOverride Json?
+  firstCommentOverride String?
+  // Irreducibly platform-specific options (TikTok privacy_level/disable_duet, Instagram
+  // media_type/location_id, Facebook link). A JSON blob rather than ~20 mostly-null columns.
+  platformOptions Json?
+  // Stable per-target identity; doubles as the BullMQ job id base.
+  idempotencyKey  String            @unique @default(cuid())
+  // Incremented on manual retry. jobId = "{idempotencyKey}-{publishRound}", so BullMQ dedupes an
+  // accidental double-enqueue of the same round while a genuine retry still gets a fresh job —
+  // queue-level idempotency without ever deleting jobs from Redis.
+  publishRound    Int               @default(0)
+  // Instagram creation-container id / TikTok publish_id. Persisted BEFORE the finalizing call so
+  // a retry resumes instead of re-uploading a 200MB video (or double-posting).
+  containerId     String?
+  // Content/media/options frozen at enqueue time, so editing a post mid-flight cannot change
+  // what actually goes out.
+  payloadSnapshot Json?
+  platformPostId  String?
+  permalink       String?
+  errorCode       String?
+  errorMessage    String?
+  attempts        Int               @default(0)
+  maxAttempts     Int               @default(5)
+  lastAttemptAt   DateTime?
+  nextAttemptAt   DateTime?
+  // Denormalized from Post.scheduledAt so the due-scan is one indexed scan of this table.
+  scheduledFor    DateTime?
+  jobId           String?
+  publishedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  post          Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id])
+  media         PostTargetMedia[]
+
+  @@unique([postId, socialAccountId])
+  @@index([status])
+  @@index([status, nextAttemptAt])
+  @@index([status, scheduledFor])
+  @@index([socialAccountId, status])
+  @@map("post_targets")
+}
+
+// Optional per-target media override. An empty set means "inherit PostMedia" — needed because a
+// 10-image Facebook album cannot go to TikTok, so one post may carry different attachments per
+// destination.
+model PostTargetMedia {
+  id           String   @id @default(cuid())
+  postTargetId String
+  mediaAssetId String
+  position     Int
+  createdAt    DateTime @default(now())
+
+  target PostTarget @relation(fields: [postTargetId], references: [id], onDelete: Cascade)
+  asset  MediaAsset @relation(fields: [mediaAssetId], references: [id])
+
+  @@unique([postTargetId, mediaAssetId])
+  @@index([postTargetId, position])
+  @@map("post_target_media")
+}
+
+model PostVersion {
+  id        String   @id @default(cuid())
+  postId    String
+  // Monotonic per post. Without it versions cannot be ordered, labelled or diffed — the original
+  // model had no way to say which of two rows came first beyond createdAt.
+  versionNumber Int
+  title     String?
+  content   String
+  contentJson Json?
+  /// Full serialized post: ordered media, per-target overrides, tags, campaign, schedule.
+  /// Content-only history cannot restore a post; a snapshot makes restore lossless without
+  /// versioning five separate tables.
+  snapshot  Json
+  changeSummary String?
+  // Real FK, replacing the original bare `editedBy String` which could dangle and needed a
+  // second query to resolve a name.
+  editedById String?
+  createdAt DateTime @default(now())
+
+  post     Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  editedBy User? @relation("PostVersionEditor", fields: [editedById], references: [id], onDelete: SetNull)
+
+  @@unique([postId, versionNumber])
+  @@index([postId, versionNumber(sort: Desc)])
+  @@map("post_versions")
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PostApproval {
+  id         String         @id @default(cuid())
+  postId     String
+  reviewerId String
+  // Approval rounds. A plain @@unique([postId, reviewerId]) would block the ordinary
+  // reject -> revise -> re-request cycle, since the same reviewer must be able to decide again.
+  round      Int            @default(1)
+  status     ApprovalStatus @default(PENDING)
+  note       String?
+  requestedById String?
+  decidedAt  DateTime?
+  createdAt  DateTime       @default(now())
+
+  post        Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reviewer    User  @relation(fields: [reviewerId], references: [id])
+  requestedBy User? @relation("ApprovalRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@unique([postId, reviewerId, round])
+  @@index([postId])
+  @@index([reviewerId, status])
+  @@map("post_approvals")
+}
+
+// Per-workspace approval policy. Without this the workflow would be hardcoded to "any manager
+// approves", which is exactly the kind of rule teams need to vary.
+model ApprovalPolicy {
+  id                String          @id @default(cuid())
+  workspaceId       String          @unique
+  enabled           Boolean         @default(false)
+  requiredApprovals Int             @default(1)
+  approverRoles     WorkspaceRole[]
+  allowAuthorSelfApprove Boolean    @default(false)
+  updatedAt         DateTime        @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("approval_policies")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  // Self-relation for threaded replies.
+  parentId  String?
+  body      String
+  mentionedUserIds String[]
+  resolvedAt DateTime?
+  resolvedById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  post       Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author     User      @relation(fields: [authorId], references: [id])
+  resolvedBy User?     @relation("CommentResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  parent     Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    Comment[] @relation("CommentReplies")
+
+  @@index([postId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+// ---------------------------------------------------------------------------
+// Organization: tags, campaigns, templates, snippets
+// ---------------------------------------------------------------------------
+
+// One vocabulary shared by posts AND media. A per-model string array (which is what MediaAsset
+// used to carry) can't be renamed, coloured, counted, or joined across the two.
+model Tag {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+  color       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  posts     PostTag[]
+  assets    MediaAssetTag[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@map("tags")
+}
+
+model PostTag {
+  postId String
+  tagId  String
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tags")
+}
+
+model MediaAssetTag {
+  mediaAssetId String
+  tagId        String
+
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  tag   Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([mediaAssetId, tagId])
+  @@index([tagId])
+  @@map("media_asset_tags")
+}
+
+enum CampaignStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model Campaign {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  color       String?
+  goal        String?
+  status      CampaignStatus @default(PLANNING)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  posts     Post[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status])
+  @@map("campaigns")
+}
+
+model PostTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  category    String?
+  content     String
+  contentJson Json?
+  /// The {{placeholder}} names found in `content`, extracted on save so the UI can prompt for them.
+  variables   String[]
+  defaultPlatforms SocialPlatform[]
+  usageCount  Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  posts     Post[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("post_templates")
+}
+
+// One model covers hashtag groups, CTAs and signatures. Three near-identical models with a
+// different name each would not earn their keep.
+enum SnippetKind {
+  TEXT
+  HASHTAG_GROUP
+  CTA
+  SIGNATURE
+}
+
+model Snippet {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String
+  kind        SnippetKind @default(TEXT)
+  body        String
+  createdById String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, kind])
+  @@map("snippets")
+}
+
+// ---------------------------------------------------------------------------
+// Media library
+// ---------------------------------------------------------------------------
+
+model MediaFolder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  parentId    String?
+  // Materialized path ("/Brand/Q1") so a subtree query is one LIKE against an index. The parent
+  // self-relation alone would need a recursive CTE, which Prisma can't express.
+  path        String   @default("/")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent    MediaFolder?  @relation("FolderChildren", fields: [parentId], references: [id])
+  children  MediaFolder[] @relation("FolderChildren")
+  assets    MediaAsset[]
+
+  @@unique([workspaceId, parentId, name])
+  @@index([workspaceId])
+  @@index([workspaceId, path])
+  @@map("media_folders")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+// Presigned upload creates the asset row *before* the bytes exist, so an asset has a lifecycle
+// rather than existing fully-formed. Without this the library would list phantom assets whose
+// URLs 404 while the browser is still uploading.
+enum MediaStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+}
+
+model MediaAsset {
+  id          String    @id @default(cuid())
+  workspaceId String
+  folderId    String?
+  uploadedById String
+  type        MediaType
+  status      MediaStatus @default(UPLOADING)
+  // The S3 object key — the asset's stable identity. `url` may be a public CDN URL or a
+  // regenerated presigned GET, so it cannot be used to address the object.
+  storageKey  String
+  url         String
+  thumbnailUrl String?
+  mimeType    String    @default("application/octet-stream")
+  fileName    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  durationMs  Int?
+  // Accessibility, and also a publish parameter — Instagram, LinkedIn and X all accept alt text.
+  altText     String?
+  caption     String?
+  // sha256 of the bytes, so re-uploading the same brand asset reuses the existing row.
+  checksum    String?
+  // @default(dbgenerated()) tells Prisma the database owns this column's value. Without it,
+  // every subsequent `migrate diff` emits ALTER COLUMN ... DROP DEFAULT, which Postgres
+  // rejects on a generated column ("use DROP EXPRESSION instead") and the migration dies.
+  searchVector Unsupported("tsvector")? @default(dbgenerated())
+  processingError String?
+  uploadedAt  DateTime?
+  isFavorite  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  // Soft delete is mandatory here: an asset referenced by a PUBLISHED PostTarget is part of the
+  // publish record and must never disappear from under it.
+  deletedAt   DateTime?
+
+  workspace  Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder     MediaFolder? @relation(fields: [folderId], references: [id])
+  uploadedBy User         @relation(fields: [uploadedById], references: [id])
+  variants   MediaVariant[]
+  postUsages       PostMedia[]
+  postTargetUsages PostTargetMedia[]
+  tags             MediaAssetTag[]
+
+  @@unique([workspaceId, checksum])
+  @@index([workspaceId])
+  @@index([folderId])
+  @@index([workspaceId, deletedAt, type, createdAt])
+  @@index([workspaceId, status])
+  @@index([searchVector], type: Gin, map: "media_assets_search_vector_idx")
+  @@index([fileName(ops: raw("gin_trgm_ops"))], type: Gin, map: "media_assets_filename_trgm_idx")
+  @@map("media_assets")
+}
+
+// Derived renditions of a MediaAsset. `thumb`/`preview` are generated on upload; platform crops
+// (e.g. an Instagram-safe 4:5) are added later, which is why this is a table rather than more
+// columns on MediaAsset.
+model MediaVariant {
+  id           String   @id @default(cuid())
+  mediaAssetId String
+  label        String
+  storageKey   String
+  url          String
+  width        Int?
+  height       Int?
+  sizeBytes    Int
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaAssetId, label])
+  @@index([mediaAssetId])
+  @@map("media_variants")
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (aggregated snapshots pulled by background jobs)
+// ---------------------------------------------------------------------------
+
+model AnalyticsSnapshot {
+  id              String         @id @default(cuid())
+  socialAccountId String
+  platform        SocialPlatform
+  capturedAt      DateTime
+  followers       Int
+  impressions     Int
+  reach           Int
+  engagement      Int
+  likes           Int
+  comments        Int
+  shares          Int
+  clicks          Int
+
+  @@index([socialAccountId, capturedAt])
+  @@map("analytics_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+enum NotificationType {
+  PUBLISH_SUCCESS
+  PUBLISH_FAILED
+  SCHEDULE_REMINDER
+  TOKEN_EXPIRING
+  WORKSPACE_INVITE
+  APPROVAL_REQUEST
+  NEW_TEAM_MEMBER
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  workspaceId String
+  userId      String
+  type        NotificationType
+  title       String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Admin / audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+  user      User?      @relation(fields: [userId], references: [id])
+
+  @@index([workspaceId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model FeatureFlag {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  enabled   Boolean  @default(false)
+  rolloutPercentage Int @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("feature_flags")
+}

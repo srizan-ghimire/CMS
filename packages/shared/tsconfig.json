@@ -1,0 +1,16 @@
+{
+  "extends": "../config/tsconfig.base.json",
+  "compilerOptions": {
+    // CommonJS because apps/api is a CommonJS NestJS build (apps/api/tsconfig.json) and consumes
+    // this package's emitted dist. apps/web consumes the same dist through Next's interop, so a
+    // single CJS output serves both rather than a dual-format build.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,194 @@
+# Render Blueprint. See docs/DEPLOYMENT.md for the full walkthrough — in particular the two-pass
+# step, which is unavoidable: Render only assigns hostnames after the first deploy, and
+# `fromService` exposes internal host/port rather than the public URL, so the URL variables below
+# are filled in afterwards.
+
+databases:
+  - name: social-platform-db
+    databaseName: social_platform
+    user: social
+    # The `free` plan expires after 30 days and takes the data with it.
+    plan: basic-256mb
+    region: oregon
+    postgresMajorVersion: "16"
+
+services:
+  # ---------------------------------------------------------------- Redis (BullMQ) ----
+  - type: keyvalue
+    name: social-platform-kv
+    plan: starter
+    region: oregon
+    # Load-bearing. Render defaults to allkeys-lru, which silently evicts BullMQ's job hashes
+    # under memory pressure — scheduled posts then vanish with no error anywhere. BullMQ requires
+    # noeviction.
+    maxmemoryPolicy: noeviction
+    ipAllowList: [] # internal network only
+
+  # ---------------------------------------------------------------- API (NestJS) ----
+  - type: web
+    name: social-platform-api
+    runtime: docker
+    region: oregon
+    # Not `free`: it spins down after 15 minutes idle, and a cold start during an OAuth redirect
+    # can outlive the 10-minute OAuthState TTL. Scheduled publishing also simply does not fire
+    # while an instance is asleep.
+    plan: starter
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    # VERSION_NEUTRAL and excluded from the global `api` prefix, so it really is /health.
+    # It pings Postgres, so a deploy with an unreachable database fails rather than going live.
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: social-platform-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: social-platform-kv
+          property: connectionString
+
+      # --- Public URLs. Filled in after pass 1; see docs/DEPLOYMENT.md. ---
+      # API_URL builds the OAuth redirect_uri registered with Meta/TikTok — it must match exactly.
+      - key: API_URL
+        sync: false
+      - key: WEB_URL
+        sync: false
+      # The origin the *browser* reaches Better Auth on; it generates verification and
+      # password-reset links from this.
+      - key: BETTER_AUTH_URL
+        sync: false
+      # Comma-separated. Feeds CORS and Better Auth's CSRF origin check.
+      - key: TRUSTED_ORIGINS
+        sync: false
+
+      # --- Session cookie scope ---
+      # ".example.com" so app.example.com and api.example.com share the cookie. Leave blank for a
+      # same-origin deployment. It can never be an onrender.com host: that is a public suffix and
+      # browsers reject the Set-Cookie outright.
+      - key: AUTH_COOKIE_DOMAIN
+        sync: false
+      - key: AUTH_COOKIE_SAME_SITE
+        value: lax
+
+      # --- Secrets ---
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # NOT generateValue: Render emits base64 and the schema demands exactly 64 hex characters.
+      # Generate with `openssl rand -hex 32`. Rotating it invalidates every stored OAuth token.
+      - key: ENCRYPTION_KEY
+        sync: false
+
+      # --- Cloudflare R2 ---
+      - key: S3_ENDPOINT # https://<accountid>.r2.cloudflarestorage.com
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_BUCKET
+        value: social-platform-media
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+      # S3_PUBLIC_URL is deliberately absent. R2 signs the Host header, so a presigned URL cannot
+      # be rehosted on a custom domain — setting it here produces SignatureDoesNotMatch on every
+      # upload. The custom media domain belongs in S3_PUBLIC_READ_URL, which is never signed.
+      - key: S3_PUBLIC_READ_URL # https://media.<yourdomain>
+        sync: false
+
+      # --- Media / publishing ---
+      # Same value as S3_PUBLIC_READ_URL. The API refuses to boot in production without it,
+      # because unset means every platform falls back to StubPublisher.
+      - key: MEDIA_PUBLIC_BASE_URL
+        sync: false
+      - key: MEDIA_MAX_UPLOAD_BYTES
+        value: "1073741824"
+      - key: MEDIA_SIGNED_URL_TTL_SECONDS
+        value: "3600"
+
+      # --- SMTP. requireEmailVerification is on, so signup is impossible without this. ---
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        value: resend
+      - key: SMTP_PASS # the Resend API key
+        sync: false
+      - key: SMTP_FROM # must be on a domain verified with Resend
+        sync: false
+
+      # --- Social OAuth ---
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_GRAPH_VERSION
+        value: v23.0
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
+
+      # --- Social login (optional). Leave blank and the sign-in page simply omits the buttons;
+      # /api/v1/auth/providers reports what is configured, so nothing renders that cannot work.
+      # Authorized redirect URI for both: {API_URL}/api/auth/callback/{google|github}
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # /api/docs publishes the whole API surface.
+      - key: ENABLE_SWAGGER
+        value: "false"
+      # The entrypoint runs `prisma migrate deploy`. Flip to false only if you move migrations to
+      # a preDeployCommand (paid plans) — never run both.
+      - key: RUN_MIGRATIONS_ON_BOOT
+        value: "true"
+
+  # ---------------------------------------------------------------- Web (Next.js) ----
+  - type: web
+    name: social-platform-web
+    runtime: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Destination for the rewrites in next.config.mjs. Internal networking — no public hop.
+      - key: API_URL
+        fromService:
+          type: web
+          name: social-platform-api
+          property: hostport
+      # A Docker build ARG, inlined into the client bundle — changing it needs a *rebuild*, not a
+      # restart. Set it to https://api.<yourdomain> once the custom domain and AUTH_COOKIE_DOMAIN
+      # are in place; leave it empty to route through the same-origin rewrites instead.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false

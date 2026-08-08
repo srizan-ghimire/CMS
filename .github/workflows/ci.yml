@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: social
+          POSTGRES_PASSWORD: social
+          POSTGRES_DB: social_platform_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U social" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+
+    env:
+      DATABASE_URL: postgresql://social:social@localhost:5432/social_platform_test
+      REDIS_URL: redis://localhost:6379
+      BETTER_AUTH_SECRET: ci_test_secret_ci_test_secret
+      JWT_ACCESS_SECRET: ci_test_secret_ci_test_secret
+      JWT_REFRESH_SECRET: ci_test_secret_ci_test_secret
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY_ID: test
+      S3_SECRET_ACCESS_KEY: test
+      S3_BUCKET: test-bucket
+      S3_PUBLIC_URL: http://localhost:9000
+      # Empty on purpose — publishing runs against the stub publisher in CI.
+      MEDIA_PUBLIC_BASE_URL: ""
+      # ENCRYPTION_KEY is required by the config schema; CI never boots the app, but any test that
+      # instantiates TokenCryptoService needs a valid 32-byte hex key.
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      # Apply the migrations, not just generate the client. A migration that Postgres rejects
+      # half-way (the tsvector generated columns are the usual culprit) is invisible to
+      # `prisma generate` and would only surface on a production deploy.
+      - run: pnpm db:deploy
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+
+  # The images are not built by `pnpm build`, so their failure modes are invisible to the job
+  # above — the web Dockerfile shipped broken for exactly this reason. Build both on every PR.
+  docker:
+    runs-on: ubuntu-latest
+    needs: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          push: false
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.ci.invalid
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web

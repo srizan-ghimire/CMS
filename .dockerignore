@@ -1,0 +1,44 @@
+# Both Dockerfiles build with `dockerContext: .` and do `COPY . .`, so this one root file
+# covers them both.
+#
+# This is a correctness file, not hygiene. Without it the host's node_modules — installed on
+# Windows, containing platform-specific binaries for sharp and the Prisma query engine — is
+# copied over the Linux node_modules that the `deps` stage just installed, and the image runs
+# on a corrupted dependency tree. It also stops apps/api/.env and apps/web/.env.local from
+# being baked into an image layer, where they would survive in the image history.
+
+node_modules
+**/node_modules
+.pnpm-store
+
+.git
+.gitignore
+.github
+.husky
+.vscode
+.idea
+
+.turbo
+**/.turbo
+**/dist
+**/.next
+**/out
+**/coverage
+**/*.tsbuildinfo
+**/.eslintcache
+
+# Secrets. The negations must come after the broad patterns to take effect.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+docs
+*.md
+!CLAUDE.md
+
+Dockerfile
+**/Dockerfile
+.dockerignore
+docker-compose.yml

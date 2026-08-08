@@ -1,0 +1,91 @@
+name: social-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: social
+      POSTGRES_PASSWORD: social
+      POSTGRES_DB: social_platform
+    ports:
+      # Host port is overridable because a natively-installed PostgreSQL commonly already owns
+      # 5432; when both bind it, connections silently reach the wrong server. Set
+      # POSTGRES_HOST_PORT in the repo-root .env (and match it in apps/api/.env DATABASE_URL).
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U social -d social_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: social_minio
+      MINIO_ROOT_PASSWORD: social_minio_secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot bootstrap: creates the media bucket and configures it for browser uploads. Without
+  # this the first presigned PUT fails with NoSuchBucket, since MinIO never auto-creates buckets.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      S3_BUCKET: ${S3_BUCKET:-social-platform-media}
+      WEB_ORIGIN: ${WEB_URL:-http://localhost:3000}
+    # Literal block (|), not folded (>): folding joins lines with spaces, which would turn every
+    # "#" comment into a comment on the single resulting line and silently swallow the rest.
+    # MinIO's default cors_allow_origin is "*", so browser PUTs need no extra CORS setup here.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mc alias set local http://minio:9000 social_minio social_minio_secret
+        mc mb --ignore-existing "local/$${S3_BUCKET}"
+        # Anonymous download so the browser can render thumbnails without a signed GET per image,
+        # and so Meta/TikTok can fetch media by URL at publish time. Writes stay authenticated:
+        # uploads only ever happen through presigned PUTs.
+        mc anonymous set download "local/$${S3_BUCKET}"
+        echo "minio bucket $${S3_BUCKET} ready"
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

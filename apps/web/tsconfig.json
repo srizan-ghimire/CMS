@@ -1,0 +1,24 @@
+{
+  "extends": "../../packages/config/tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "lib": ["dom", "dom.iterable", "ES2022"],
+    "noEmit": true,
+    "allowJs": false,
+    "incremental": true,
+    // The base config turns these on for the shared library. A Next app never emits declarations,
+    // and leaving them on makes tsc demand a portable name for every inferred type — which
+    // better-auth's createAuthClient return type cannot provide (it references zod's internals
+    // through a pnpm-hashed path).
+    "declaration": false,
+    "declarationMap": false,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

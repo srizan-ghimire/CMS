@@ -1,0 +1,53 @@
+{
+  "name": "social-platform",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.7.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "prepare": "husky",
+    "db:generate": "pnpm --filter api run prisma:generate",
+    "db:migrate": "pnpm --filter api run prisma:migrate",
+    "db:deploy": "pnpm --filter api run prisma:deploy",
+    "db:seed": "pnpm --filter api run prisma:seed",
+    "db:studio": "pnpm --filter api exec prisma studio",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.0",
+    "prettier": "^3.3.3",
+    "prettier-plugin-tailwindcss": "^0.6.6",
+    "eslint": "^9.9.0",
+    "@eslint/js": "^9.9.0",
+    "typescript-eslint": "^8.0.1",
+    "@next/eslint-plugin-next": "^15.0.0",
+    "husky": "^9.1.4",
+    "lint-staged": "^15.2.9",
+    "@commitlint/cli": "^19.4.0",
+    "@commitlint/config-conventional": "^19.2.2",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{md,json}": [
+      "prettier --write"
+    ]
+  }
+}
