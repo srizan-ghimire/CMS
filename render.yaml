@@ -16,7 +16,7 @@ services:
     # In-flight BullMQ jobs (queued publishes, the token-refresh repeatable) go with it. Posts stay
     # SCHEDULED in Postgres, so re-scheduling recovers them, but nothing replays automatically.
     plan: free
-    region: oregon
+    region: singapore
     # Load-bearing. Render defaults to allkeys-lru, which silently evicts BullMQ's job hashes
     # under memory pressure — scheduled posts then vanish with no error anywhere. BullMQ requires
     # noeviction.
@@ -27,7 +27,7 @@ services:
   - type: web
     name: social-platform-api
     runtime: docker
-    region: oregon
+    region: singapore
     # FREE TIER, with two consequences you cannot configure away:
     #   - The instance spins down after 15 minutes idle. BullMQ does not run while it is asleep,
     #     so scheduled posts fire late (on the next wake) or not at all. Publish-now works.
@@ -173,7 +173,7 @@ services:
   - type: web
     name: social-platform-web
     runtime: docker
-    region: oregon
+    region: singapore
     # FREE TIER: spins down after 15 minutes idle; the first request after that waits on a cold
     # start. Note the 750 free instance-hours/month are shared across *all* free web services in
     # the workspace, so two always-on free services would exhaust the budget mid-month — letting

@@ -99,12 +99,14 @@ The blueprint uses `generateValue: true` for the three auth secrets but delibera
 Render's own free Postgres is deleted 30 days after creation, so the blueprint has no `databases:`
 block — `DATABASE_URL` is a `sync: false` secret you paste in.
 
-1. Create a project. Pick the region closest to Render's — `oregon` in the blueprint, so
-   **West US (Oregon)**. Save the database password Supabase shows you once.
+1. Create a project. **Match the region to Render's** — `singapore` in the blueprint, so
+   **Southeast Asia (Singapore)**. This is not cosmetic: a request here makes several queries, so a
+   cross-region database multiplies its round-trip latency by every one of them. Save the database
+   password Supabase shows you once.
 2. Supabase Dashboard → **Connect**. You are offered three strings. Take the **Session pooler** one:
 
 ```
-postgresql://postgres.<project-ref>:<password>@aws-1-us-west-1.pooler.supabase.com:5432/postgres
+postgresql://postgres.<project-ref>:<password>@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 ```
 
 Note the username is `postgres.<project-ref>`, not `postgres`, and the host is the `pooler.` one.
