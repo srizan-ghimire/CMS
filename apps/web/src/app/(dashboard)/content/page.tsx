@@ -27,7 +27,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "success" | "warning" | "destructive"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "secondary" | "outline" | "success" | "warning" | "destructive"
+> = {
   DRAFT: "secondary",
   PENDING_APPROVAL: "warning",
   SCHEDULED: "default",
@@ -65,7 +68,7 @@ export default function ContentPage() {
 
   if (workspaceLoading) return <Skeleton className="h-64 w-full" />;
   if (!workspaceId) {
-    return <p className="text-sm text-muted-foreground">Create a workspace to manage content.</p>;
+    return <p className="text-muted-foreground text-sm">Create a workspace to manage content.</p>;
   }
 
   return (
@@ -73,7 +76,7 @@ export default function ContentPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">All content</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Every draft, scheduled and published post in this workspace.
           </p>
         </div>
@@ -87,9 +90,9 @@ export default function ContentPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:min-w-[220px] sm:flex-1">
+          <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -99,7 +102,7 @@ export default function ContentPage() {
         </div>
 
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -129,7 +132,7 @@ export default function ContentPage() {
           ))}
         </div>
       ) : (data?.items.length ?? 0) === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
+        <div className="border-border text-muted-foreground rounded-lg border border-dashed px-6 py-12 text-center text-sm">
           {search || status !== "all" ? "Nothing matches these filters." : "No posts yet."}
         </div>
       ) : (
@@ -139,10 +142,15 @@ export default function ContentPage() {
               key={post.id}
               post={post}
               canEdit={canEdit}
-              onDuplicate={() => run(action.mutateAsync({ id: post.id, action: "duplicate" }), "Duplicated")}
+              onDuplicate={() =>
+                run(action.mutateAsync({ id: post.id, action: "duplicate" }), "Duplicated")
+              }
               onArchive={() =>
                 run(
-                  action.mutateAsync({ id: post.id, action: post.archivedAt ? "unarchive" : "archive" }),
+                  action.mutateAsync({
+                    id: post.id,
+                    action: post.archivedAt ? "unarchive" : "archive",
+                  }),
                   post.archivedAt ? "Unarchived" : "Archived",
                 )
               }
@@ -171,7 +179,7 @@ function PostRow({
   const preview = post.content.trim().split("\n")[0] ?? "";
 
   return (
-    <li className="flex items-start gap-3 rounded-lg border border-border p-3">
+    <li className="border-border flex items-start gap-3 rounded-lg border p-3">
       {post.media[0] && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -187,7 +195,7 @@ function PostRow({
             {post.title || preview || "Untitled draft"}
           </p>
           {post.title && preview && (
-            <p className="truncate text-sm text-muted-foreground">{preview}</p>
+            <p className="text-muted-foreground truncate text-sm">{preview}</p>
           )}
         </Link>
 
@@ -201,11 +209,11 @@ function PostRow({
               <PlatformIcon
                 key={target.id}
                 platform={target.platform}
-                className="h-3.5 w-3.5 text-muted-foreground"
+                className="text-muted-foreground h-3.5 w-3.5"
               />
             ))}
           </span>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {post.scheduledAt
               ? `scheduled ${formatRelative(post.scheduledAt)}`
               : `edited ${formatRelative(post.updatedAt)}`}

@@ -10,6 +10,7 @@ import { PlatformIcon, platformLabel } from "@/components/composer/platform-icon
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/misc";
+import { AnimatedNumber, DURATION, EASE, motion, useReducedMotion } from "@/components/ui/motion";
 import {
   Select,
   SelectContent,
@@ -52,22 +53,23 @@ export default function AnalyticsPage() {
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (!workspaceId) {
-    return <p className="text-sm text-muted-foreground">Create a workspace first.</p>;
+    return <p className="text-muted-foreground text-sm">Create a workspace first.</p>;
   }
 
   const peak = Math.max(1, ...(data?.timeline ?? []).map((d) => d.published));
+  const reduceMotion = useReducedMotion();
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Analytics</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Content volume and delivery reliability, from this platform&apos;s own publish record.
           </p>
         </div>
         <Select value={days} onValueChange={setDays}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-full sm:w-[150px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -80,7 +82,7 @@ export default function AnalyticsPage() {
 
       {/* Stated plainly rather than shown as an empty chart: engagement metrics need each
           platform's insights API, which this deployment does not poll. */}
-      <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+      <p className="border-border text-muted-foreground rounded-md border border-dashed px-3 py-2 text-xs">
         Reach, impressions and engagement are not shown — they require polling each platform&apos;s
         insights API, which this deployment does not do.
       </p>
@@ -92,22 +94,35 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             {(data?.timeline ?? []).every((d) => d.published === 0) ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
+              <p className="text-muted-foreground py-8 text-center text-sm">
                 Nothing published in this window.
               </p>
             ) : (
               <div className="flex h-40 items-end gap-px">
-                {data?.timeline.map((day) => (
-                  <div
+                {data?.timeline.map((day, index) => (
+                  <motion.div
                     key={day.date}
-                    className="group relative flex-1 bg-primary/20 transition-colors hover:bg-primary/40"
+                    className="bg-primary/20 hover:bg-primary/40 group relative flex-1 origin-bottom transition-colors"
                     style={{ height: `${Math.max(2, (day.published / peak) * 100)}%` }}
                     title={`${day.date}: ${day.published}`}
+                    // Bars grow from the axis, left to right, so the chart reads as being drawn.
+                    // The cap keeps a 90-day window from taking three seconds to finish.
+                    {...(reduceMotion
+                      ? {}
+                      : {
+                          initial: { scaleY: 0 },
+                          animate: { scaleY: 1 },
+                          transition: {
+                            duration: DURATION.entrance,
+                            delay: Math.min(index * 0.012, 0.5),
+                            ease: EASE,
+                          },
+                        })}
                   >
-                    <span className="pointer-events-none absolute -top-5 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-popover px-1 text-[10px] shadow group-hover:block">
+                    <span className="bg-popover pointer-events-none absolute -top-5 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded px-1 text-[10px] shadow group-hover:block">
                       {day.published}
                     </span>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -122,7 +137,7 @@ export default function AnalyticsPage() {
             <Row label="Succeeded" value={data?.delivery.succeeded ?? 0} />
             <Row label="Failed" value={data?.delivery.failed ?? 0} />
             <Row label="Skipped (validation)" value={data?.delivery.skipped ?? 0} />
-            <div className="border-t border-border pt-2">
+            <div className="border-border border-t pt-2">
               <Row label="Success rate" value={`${data?.delivery.successRate ?? 0}%`} bold />
             </div>
           </CardContent>
@@ -136,14 +151,14 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             {(data?.byPlatform.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground">No deliveries yet.</p>
+              <p className="text-muted-foreground text-sm">No deliveries yet.</p>
             ) : (
               <ul className="space-y-2">
                 {data?.byPlatform.map((row) => (
                   <li key={row.platform} className="flex items-center gap-2 text-sm">
                     <PlatformIcon
                       platform={row.platform as SocialPlatform}
-                      className="h-4 w-4 text-muted-foreground"
+                      className="text-muted-foreground h-4 w-4"
                     />
                     <span className="flex-1">{platformLabel(row.platform as SocialPlatform)}</span>
                     <span className="tabular-nums">{row.published}</span>
@@ -161,13 +176,13 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             {(data?.topCampaigns.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground">No campaigns yet.</p>
+              <p className="text-muted-foreground text-sm">No campaigns yet.</p>
             ) : (
               <ul className="space-y-2">
                 {data?.topCampaigns.map((campaign) => (
                   <li key={campaign.id} className="flex items-center gap-2 text-sm">
                     <span className="flex-1 truncate">{campaign.name}</span>
-                    <span className="tabular-nums text-muted-foreground">
+                    <span className="text-muted-foreground tabular-nums">
                       {campaign.publishedCount}/{campaign.postCount}
                     </span>
                   </li>
@@ -193,7 +208,7 @@ export default function AnalyticsPage() {
                   >
                     {failure.title}
                   </Link>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {failure.accountName} · {failure.errorMessage ?? "failed"} ({failure.attempts}{" "}
                     attempt{failure.attempts === 1 ? "" : "s"})
                   </p>
@@ -211,7 +226,9 @@ function Row({ label, value, bold }: { label: string; value: number | string; bo
   return (
     <div className="flex items-center justify-between">
       <span className="text-muted-foreground">{label}</span>
-      <span className={bold ? "font-semibold tabular-nums" : "tabular-nums"}>{value}</span>
+      <span className={bold ? "font-semibold tabular-nums" : "tabular-nums"}>
+        {typeof value === "number" ? <AnimatedNumber value={value} /> : value}
+      </span>
     </div>
   );
 }

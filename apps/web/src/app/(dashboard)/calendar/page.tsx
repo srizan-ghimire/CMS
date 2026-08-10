@@ -107,6 +107,26 @@ export default function CalendarPage() {
     return map;
   }, [entries]);
 
+  /**
+   * The month grid's data reshaped for the phone agenda: only the anchor month (the grid's leading
+   * and trailing days belong to neighbouring months and would read as noise in a flat list), only
+   * days with entries, each day's posts in time order.
+   */
+  const agenda = useMemo(
+    () =>
+      days
+        .filter((day) => day.getMonth() === anchor.getMonth())
+        .map((day) => ({ day, dayEntries: byDay.get(day.toDateString()) ?? [] }))
+        .filter(({ dayEntries }) => dayEntries.length > 0)
+        .map(({ day, dayEntries }) => ({
+          day,
+          dayEntries: [...dayEntries].sort(
+            (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
+          ),
+        })),
+    [days, anchor, byDay],
+  );
+
   const drop = async (day: Date) => {
     if (!dragging || !canSchedule) return;
     // Move the date but keep the time-of-day: dragging across the grid is a day-level gesture,
@@ -130,7 +150,7 @@ export default function CalendarPage() {
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
   if (!workspaceId) {
-    return <p className="text-sm text-muted-foreground">Create a workspace to see the calendar.</p>;
+    return <p className="text-muted-foreground text-sm">Create a workspace to see the calendar.</p>;
   }
 
   return (
@@ -138,11 +158,11 @@ export default function CalendarPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Calendar</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Everything scheduled, with live publish status.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <Button
             variant="outline"
             size="icon"
@@ -151,7 +171,7 @@ export default function CalendarPage() {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-[150px] text-center text-sm font-medium">
+          <span className="flex-1 text-center text-sm font-medium sm:min-w-[150px] sm:flex-none">
             {anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
           </span>
           <Button
@@ -168,13 +188,16 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <div className="min-w-[720px] border-l border-t border-border">
+      {/* The month grid needs real width and a mouse: it is 7 columns wide and rescheduling is
+          drag-and-drop. At 375px that is ~50px per day, and dragging inside a horizontally
+          scrolling container fights the scroll gesture. Phones get the agenda below instead. */}
+      <div className="hidden overflow-x-auto md:block">
+        <div className="border-border min-w-[720px] border-l border-t">
           <div className="grid grid-cols-7">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
               <div
                 key={label}
-                className="border-b border-r border-border px-2 py-1.5 text-xs font-medium text-muted-foreground"
+                className="border-border text-muted-foreground border-b border-r px-2 py-1.5 text-xs font-medium"
               >
                 {label}
               </div>
@@ -193,7 +216,7 @@ export default function CalendarPage() {
                   onDragOver={(e) => canSchedule && e.preventDefault()}
                   onDrop={() => void drop(day)}
                   className={cn(
-                    "min-h-[104px] border-b border-r border-border p-1.5",
+                    "border-border min-h-[104px] border-b border-r p-1.5",
                     !inMonth && "bg-muted/30",
                   )}
                 >
@@ -201,7 +224,7 @@ export default function CalendarPage() {
                     className={cn(
                       "mb-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs",
                       isToday
-                        ? "bg-primary font-medium text-primary-foreground"
+                        ? "bg-primary text-primary-foreground font-medium"
                         : "text-muted-foreground",
                     )}
                   >
@@ -235,6 +258,63 @@ export default function CalendarPage() {
             })}
           </div>
         </div>
+      </div>
+
+      {/* Phone view of the same month: chronological, only days that have something on them.
+          Read-only by design — rescheduling stays on the grid, where a drag has somewhere to go. */}
+      <div className="space-y-3 md:hidden">
+        {agenda.length === 0 ? (
+          <p className="border-border text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
+            Nothing scheduled in{" "}
+            {anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" })}.
+          </p>
+        ) : (
+          agenda.map(({ day, dayEntries }) => (
+            <section key={day.toISOString()} className="border-border rounded-lg border">
+              <header className="border-border flex items-baseline justify-between border-b px-3 py-2">
+                <span
+                  className={cn("text-sm font-medium", sameDay(day, new Date()) && "text-primary")}
+                >
+                  {day.toLocaleDateString(undefined, {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </span>
+                <span className="marker text-muted-foreground">
+                  {dayEntries.length} {dayEntries.length === 1 ? "post" : "posts"}
+                </span>
+              </header>
+              <ul className="divide-border divide-y">
+                {dayEntries.map((entry) => (
+                  <li key={entry.postId}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(entry)}
+                      className="hover:bg-muted/50 flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left transition-colors"
+                    >
+                      <span className="marker text-muted-foreground shrink-0 tabular-nums">
+                        {new Date(entry.scheduledAt).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm">{entry.title}</span>
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "h-2 w-2 shrink-0 rounded-full",
+                          STATUS_COLOR[entry.status] ?? "bg-muted",
+                        )}
+                      />
+                      <span className="sr-only">{entry.status.toLowerCase()}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))
+        )}
       </div>
 
       <PublishLogDialog
@@ -284,7 +364,7 @@ function PublishLogDialog({
 
         <ul className="space-y-2">
           {entry.targets.map((target) => (
-            <li key={target.id} className="rounded-md border border-border p-2.5 text-sm">
+            <li key={target.id} className="border-border rounded-md border p-2.5 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{target.accountName}</span>
                 <Badge
@@ -303,10 +383,10 @@ function PublishLogDialog({
               </div>
 
               {target.errorMessage && (
-                <p className="mt-1 text-xs text-destructive">{target.errorMessage}</p>
+                <p className="text-destructive mt-1 text-xs">{target.errorMessage}</p>
               )}
               {target.attempts > 0 && (
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="text-muted-foreground mt-1 text-xs">
                   {target.attempts} attempt{target.attempts === 1 ? "" : "s"}
                   {target.nextAttemptAt
                     ? ` · next ${new Date(target.nextAttemptAt).toLocaleTimeString()}`
@@ -318,7 +398,7 @@ function PublishLogDialog({
                   href={target.permalink}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1 inline-block text-xs text-primary hover:underline"
+                  className="text-primary mt-1 inline-block text-xs hover:underline"
                 >
                   View post
                 </a>
@@ -339,7 +419,10 @@ function PublishLogDialog({
           ))}
         </ul>
 
-        <Link href={`/composer?id=${entry.postId}`} className="text-sm text-primary hover:underline">
+        <Link
+          href={`/composer?id=${entry.postId}`}
+          className="text-primary text-sm hover:underline"
+        >
           Open in composer
         </Link>
       </DialogContent>

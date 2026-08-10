@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label, Skeleton } from "@/components/ui/misc";
+import { Stagger, StaggerItem } from "@/components/ui/motion";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +74,7 @@ export default function CampaignsPage() {
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (!workspaceId) {
-    return <p className="text-sm text-muted-foreground">Create a workspace first.</p>;
+    return <p className="text-muted-foreground text-sm">Create a workspace first.</p>;
   }
 
   return (
@@ -81,7 +82,7 @@ export default function CampaignsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Campaigns</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Group related posts and track how much of each campaign has gone out.
           </p>
         </div>
@@ -94,44 +95,46 @@ export default function CampaignsPage() {
       </div>
 
       {(data?.length ?? 0) === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
+        <div className="border-border text-muted-foreground rounded-lg border border-dashed px-6 py-12 text-center text-sm">
           No campaigns yet.
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Stagger className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data?.map((campaign) => (
-            <Card key={campaign.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-base">{campaign.name}</CardTitle>
-                  <Badge variant={campaign.status === "ACTIVE" ? "success" : "secondary"}>
-                    {campaign.status.toLowerCase()}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {campaign.description && (
-                  <p className="text-sm text-muted-foreground">{campaign.description}</p>
-                )}
-                <p className="text-sm">
-                  <span className="font-medium">{campaign.publishedCount}</span> of{" "}
-                  <span className="font-medium">{campaign.postCount}</span> posts published
-                </p>
-                {canManage && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => remove.mutate(campaign.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+            <StaggerItem key={campaign.id}>
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base">{campaign.name}</CardTitle>
+                    <Badge variant={campaign.status === "ACTIVE" ? "success" : "secondary"}>
+                      {campaign.status.toLowerCase()}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {campaign.description && (
+                    <p className="text-muted-foreground text-sm">{campaign.description}</p>
+                  )}
+                  <p className="text-sm">
+                    <span className="font-medium">{campaign.publishedCount}</span> of{" "}
+                    <span className="font-medium">{campaign.postCount}</span> posts published
+                  </p>
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() => remove.mutate(campaign.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -179,7 +182,10 @@ export default function CampaignsPage() {
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending}>
+            <Button
+              onClick={() => create.mutate()}
+              disabled={!form.name.trim() || create.isPending}
+            >
               Create
             </Button>
           </DialogFooter>

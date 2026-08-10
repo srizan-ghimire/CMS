@@ -4,11 +4,12 @@ import { AlertCircle, FileText, Film, Loader2, Star } from "lucide-react";
 import type { MediaAssetDto } from "@social-platform/shared";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/misc";
+import { Stagger, StaggerItem } from "@/components/ui/motion";
 
 function AssetPreview({ asset }: { asset: MediaAssetDto }) {
   if (asset.status === "PROCESSING" || asset.status === "UPLOADING") {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+      <div className="bg-muted text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-1">
         <Loader2 className="h-5 w-5 animate-spin" />
         <span className="text-[11px]">
           {asset.status === "UPLOADING" ? "Uploading" : "Processing"}
@@ -19,7 +20,7 @@ function AssetPreview({ asset }: { asset: MediaAssetDto }) {
 
   if (asset.status === "FAILED") {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-destructive/10 px-2 text-center text-destructive">
+      <div className="bg-destructive/10 text-destructive flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-center">
         <AlertCircle className="h-5 w-5" />
         <span className="line-clamp-2 text-[11px]">{asset.processingError ?? "Failed"}</span>
       </div>
@@ -28,13 +29,14 @@ function AssetPreview({ asset }: { asset: MediaAssetDto }) {
 
   if (asset.type === "DOCUMENT") {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted text-muted-foreground">
+      <div className="bg-muted text-muted-foreground flex h-full w-full items-center justify-center">
         <FileText className="h-7 w-7" />
       </div>
     );
   }
 
-  const src = asset.variants.find((v) => v.label === "thumb")?.url ?? asset.thumbnailUrl ?? asset.url;
+  const src =
+    asset.variants.find((v) => v.label === "thumb")?.url ?? asset.thumbnailUrl ?? asset.url;
 
   return (
     <>
@@ -72,28 +74,31 @@ export function MediaGrid({
 }) {
   if (assets.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
+      <div className="border-border text-muted-foreground rounded-lg border border-dashed px-6 py-12 text-center text-sm">
         {emptyMessage}
       </div>
     );
   }
 
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <Stagger
+      as="ul"
+      className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+    >
       {assets.map((asset) => {
         const selected = selectedIds?.has(asset.id) ?? false;
         return (
-          <li key={asset.id}>
+          <StaggerItem as="li" key={asset.id}>
             <div
               className={cn(
                 "group relative overflow-hidden rounded-lg border transition-colors",
-                selected ? "border-primary ring-2 ring-primary/30" : "border-border",
+                selected ? "border-primary ring-primary/30 ring-2" : "border-border",
               )}
             >
               <button
                 type="button"
                 onClick={() => onOpen?.(asset)}
-                className="relative block aspect-square w-full overflow-hidden bg-muted"
+                className="bg-muted relative block aspect-square w-full overflow-hidden"
                 aria-label={`Open ${asset.fileName}`}
               >
                 <AssetPreview asset={asset} />
@@ -116,14 +121,14 @@ export function MediaGrid({
               )}
 
               {asset.isFavorite && (
-                <Star className="absolute right-2 top-2 h-4 w-4 fill-warning text-warning" />
+                <Star className="fill-warning text-warning absolute right-2 top-2 h-4 w-4" />
               )}
 
               <div className="space-y-0.5 p-2">
                 <p className="truncate text-xs font-medium" title={asset.fileName}>
                   {asset.fileName}
                 </p>
-                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <p className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
                   <span>{formatBytes(asset.sizeBytes)}</span>
                   {asset.width && asset.height && (
                     <span>
@@ -138,9 +143,9 @@ export function MediaGrid({
                 </p>
               </div>
             </div>
-          </li>
+          </StaggerItem>
         );
       })}
-    </ul>
+    </Stagger>
   );
 }

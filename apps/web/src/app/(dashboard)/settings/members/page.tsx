@@ -85,13 +85,14 @@ export default function MembersPage() {
   });
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!workspaceId) return <p className="text-sm text-muted-foreground">Create a workspace first.</p>;
+  if (!workspaceId)
+    return <p className="text-muted-foreground text-sm">Create a workspace first.</p>;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Members</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-1 text-sm">
           Who can work in this workspace, and what they can do.
         </p>
       </div>
@@ -102,9 +103,9 @@ export default function MembersPage() {
             e.preventDefault();
             if (email.trim()) invite.mutate();
           }}
-          className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-3"
+          className="border-border flex flex-wrap items-end gap-2 rounded-lg border p-3"
         >
-          <div className="min-w-[200px] flex-1 space-y-1.5">
+          <div className="w-full space-y-1.5 sm:min-w-[200px] sm:flex-1">
             <Label htmlFor="email">Invite by email</Label>
             <Input
               id="email"
@@ -114,10 +115,10 @@ export default function MembersPage() {
               placeholder="teammate@example.com"
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="w-full space-y-1.5 sm:w-auto">
             <Label>Role</Label>
             <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as WorkspaceRole)}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full sm:w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -129,7 +130,11 @@ export default function MembersPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button type="submit" disabled={!email.trim() || invite.isPending}>
+          <Button
+            type="submit"
+            disabled={!email.trim() || invite.isPending}
+            className="w-full sm:w-auto"
+          >
             <UserPlus className="h-4 w-4" />
             Invite
           </Button>
@@ -142,11 +147,11 @@ export default function MembersPage() {
           {members.data?.map((member) => (
             <li
               key={member.userId}
-              className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3"
+              className="border-border flex flex-wrap items-center gap-3 rounded-lg border p-3"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{member.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+                <p className="text-muted-foreground truncate text-xs">{member.email}</p>
               </div>
 
               {member.isOwner ? (
@@ -173,7 +178,7 @@ export default function MembersPage() {
                 <Badge variant="secondary">{member.role.toLowerCase()}</Badge>
               )}
 
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 joined {formatRelative(member.joinedAt)}
               </span>
 
@@ -199,12 +204,12 @@ export default function MembersPage() {
             {invitations.data?.map((invitation) => (
               <li
                 key={invitation.id}
-                className="flex items-center gap-3 rounded-lg border border-dashed border-border p-3"
+                className="border-border flex items-center gap-3 rounded-lg border border-dashed p-3"
               >
-                <Mail className="h-4 w-4 text-muted-foreground" />
+                <Mail className="text-muted-foreground h-4 w-4" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm">{invitation.email}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {invitation.role.toLowerCase()} · expires {formatRelative(invitation.expiresAt)}
                   </p>
                 </div>

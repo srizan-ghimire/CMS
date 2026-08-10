@@ -83,7 +83,7 @@ export default function MediaPage() {
 
   if (!workspaceId) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         You don&apos;t have a workspace yet. Create one to start uploading media.
       </p>
     );
@@ -93,7 +93,7 @@ export default function MediaPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Media library</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-1 text-sm">
           Reusable images, video and documents for this workspace.
         </p>
       </div>
@@ -114,9 +114,9 @@ export default function MediaPage() {
             <MediaUploader uploads={uploads} onUpload={upload} onClearCompleted={clearCompleted} />
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] flex-1">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative w-full sm:min-w-[200px] sm:flex-1">
+              <Search className="text-muted-foreground absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -126,7 +126,7 @@ export default function MediaPage() {
             </div>
 
             <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full sm:w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -149,7 +149,7 @@ export default function MediaPage() {
           </div>
 
           {selectedIds.size > 0 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+            <div className="border-border bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
               <span className="font-medium">{selectedIds.size} selected</span>
               <div className="ml-auto flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => runBulk("favorite")}>

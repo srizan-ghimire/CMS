@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label, Skeleton } from "@/components/ui/misc";
+import { Stagger, StaggerItem } from "@/components/ui/motion";
 import {
   Dialog,
   DialogContent,
@@ -79,14 +80,15 @@ export default function TemplatesPage() {
   const draftVariables = extractTemplateVariables(form.content);
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!workspaceId) return <p className="text-sm text-muted-foreground">Create a workspace first.</p>;
+  if (!workspaceId)
+    return <p className="text-muted-foreground text-sm">Create a workspace first.</p>;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Templates</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Reusable post formats. Use <code className="text-xs">{"{{variable}}"}</code> for the
             parts that change each time.
           </p>
@@ -100,58 +102,60 @@ export default function TemplatesPage() {
       </div>
 
       {(data?.length ?? 0) === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
+        <div className="border-border text-muted-foreground rounded-lg border border-dashed px-6 py-12 text-center text-sm">
           No templates yet.
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Stagger className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data?.map((template) => (
-            <Card key={template.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-base">{template.name}</CardTitle>
-                  <Badge variant="secondary">used {template.usageCount}×</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <p className="line-clamp-3 whitespace-pre-wrap text-sm text-muted-foreground">
-                  {template.content}
-                </p>
-                {template.variables.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {template.variables.map((v) => (
-                      <Badge key={v} variant="outline">
-                        {v}
-                      </Badge>
-                    ))}
+            <StaggerItem key={template.id}>
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base">{template.name}</CardTitle>
+                    <Badge variant="secondary">used {template.usageCount}×</Badge>
                   </div>
-                )}
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setUsing(template);
-                      setValues(Object.fromEntries(template.variables.map((v) => [v, ""])));
-                    }}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Use
-                  </Button>
-                  {canManage && (
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <p className="text-muted-foreground line-clamp-3 whitespace-pre-wrap text-sm">
+                    {template.content}
+                  </p>
+                  {template.variables.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {template.variables.map((v) => (
+                        <Badge key={v} variant="outline">
+                          {v}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 pt-1">
                     <Button
                       size="sm"
-                      variant="ghost"
-                      className="text-destructive"
-                      onClick={() => remove.mutate(template.id)}
+                      onClick={() => {
+                        setUsing(template);
+                        setValues(Object.fromEntries(template.variables.map((v) => [v, ""])));
+                      }}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Use
                     </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    {canManage && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => remove.mutate(template.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       )}
 
       {/* Create */}
@@ -182,7 +186,7 @@ export default function TemplatesPage() {
                 onChange={(e) => setForm({ ...form, content: e.target.value })}
               />
               {draftVariables.length > 0 && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Detected: {draftVariables.join(", ")}
                 </p>
               )}
@@ -224,7 +228,7 @@ export default function TemplatesPage() {
               </div>
             ))}
             {(using?.variables.length ?? 0) === 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 This template has no variables — it will be copied as-is.
               </p>
             )}

@@ -147,7 +147,11 @@ function Composer() {
           if (!silent) toast.success("Draft saved");
           return saved;
         }
-        const created = await createPost.mutateAsync({ workspaceId, timezone: "UTC", ...buildPayload() });
+        const created = await createPost.mutateAsync({
+          workspaceId,
+          timezone: "UTC",
+          ...buildPayload(),
+        });
         store.markClean();
         // Put the new id in the URL so a reload resumes the same draft instead of starting over.
         router.replace(`/composer?id=${created.id}`);
@@ -184,7 +188,7 @@ function Composer() {
 
   if (workspaceLoading || (postId && postLoading)) return <Skeleton className="h-96 w-full" />;
   if (!workspaceId) {
-    return <p className="text-sm text-muted-foreground">Create a workspace to start composing.</p>;
+    return <p className="text-muted-foreground text-sm">Create a workspace to start composing.</p>;
   }
 
   return (
@@ -192,12 +196,12 @@ function Composer() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{store.postId ? "Edit post" : "New post"}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-sm">
             Write once, tailor per platform, then schedule or publish.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {updatePost.isPending || createPost.isPending ? (
               <span className="flex items-center gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" /> Saving…
@@ -210,7 +214,11 @@ function Composer() {
               </span>
             ) : null}
           </span>
-          <Button variant="outline" onClick={() => void save(false)} disabled={!canEdit || !editable}>
+          <Button
+            variant="outline"
+            onClick={() => void save(false)}
+            disabled={!canEdit || !editable}
+          >
             Save draft
           </Button>
         </div>
@@ -227,8 +235,8 @@ function Composer() {
       )}
 
       {!editable && (
-        <p className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
-          <AlertTriangle className="h-4 w-4 text-warning" />
+        <p className="border-warning/40 bg-warning/10 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+          <AlertTriangle className="text-warning h-4 w-4" />
           This post is {post?.status.toLowerCase().replace("_", " ")} and can no longer be edited.
         </p>
       )}
@@ -261,7 +269,10 @@ function Composer() {
               <TabsTrigger value="shared">Shared content</TabsTrigger>
               {selectedAccounts.map((account) => (
                 <TabsTrigger key={account.id} value={account.id} className="gap-1.5">
-                  <PlatformIcon platform={account.platform as SocialPlatform} className="h-3.5 w-3.5" />
+                  <PlatformIcon
+                    platform={account.platform as SocialPlatform}
+                    className="h-3.5 w-3.5"
+                  />
                   <span className="max-w-[90px] truncate">{account.displayName}</span>
                 </TabsTrigger>
               ))}
@@ -303,14 +314,16 @@ function Composer() {
                   disabled={!editable}
                   onInsert={(body) =>
                     store.setFirstComment(
-                      store.firstComment ? `${store.firstComment}
-${body}` : body,
+                      store.firstComment
+                        ? `${store.firstComment}
+${body}`
+                        : body,
                     )
                   }
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+              <div className="border-border flex flex-wrap items-center gap-3 border-t pt-3">
                 <TagPicker
                   workspaceId={workspaceId}
                   selectedIds={tagIds}
@@ -332,7 +345,7 @@ ${body}` : body,
                     })
                   }
                 >
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger className="w-full sm:w-[200px]">
                     <SelectValue placeholder="No campaign" />
                   </SelectTrigger>
                   <SelectContent>
@@ -346,7 +359,7 @@ ${body}` : body,
                 </Select>
 
                 {!store.postId && (
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     Save the draft first to tag it.
                   </span>
                 )}
@@ -355,7 +368,8 @@ ${body}` : body,
 
             {selectedAccounts.map((account) => {
               const target = store.targets.find((t) => t.socialAccountId === account.id);
-              const overriding = target?.contentOverride !== null && target?.contentOverride !== undefined;
+              const overriding =
+                target?.contentOverride !== null && target?.contentOverride !== undefined;
               return (
                 <TabsContent key={account.id} value={account.id} className="space-y-3">
                   <label className="flex items-center gap-2 text-sm">
@@ -395,14 +409,16 @@ ${body}` : body,
           </Tabs>
 
           {blocking.length > 0 && (
-            <div className="space-y-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
-              <p className="flex items-center gap-2 text-sm font-medium text-destructive">
+            <div className="border-destructive/40 bg-destructive/5 space-y-1.5 rounded-md border px-3 py-2">
+              <p className="text-destructive flex items-center gap-2 text-sm font-medium">
                 <AlertTriangle className="h-4 w-4" />
                 Fix before publishing
               </p>
-              <ul className="ml-6 list-disc space-y-0.5 text-sm text-destructive">
+              <ul className="text-destructive ml-6 list-disc space-y-0.5 text-sm">
                 {blocking.flatMap((target) =>
-                  target.errors.map((error) => <li key={`${target.socialAccountId}-${error}`}>{error}</li>),
+                  target.errors.map((error) => (
+                    <li key={`${target.socialAccountId}-${error}`}>{error}</li>
+                  )),
                 )}
               </ul>
             </div>
@@ -412,7 +428,7 @@ ${body}` : body,
         <aside className="space-y-3">
           <p className="text-sm font-medium">Preview</p>
           {selectedAccounts.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+            <p className="border-border text-muted-foreground rounded-md border border-dashed px-3 py-6 text-center text-sm">
               Select an account to see a preview.
             </p>
           ) : (
@@ -435,7 +451,7 @@ ${body}` : body,
       </div>
 
       {store.postId && session?.user?.id && (
-        <div className="border-t border-border pt-5">
+        <div className="border-border border-t pt-5">
           <CollaborationPanel
             postId={store.postId}
             currentUserId={session.user.id}

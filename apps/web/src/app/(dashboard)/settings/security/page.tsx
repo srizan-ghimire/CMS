@@ -85,7 +85,7 @@ export default function SecuritySettingsPage() {
     <div className="max-w-2xl space-y-10">
       <div>
         <h1 className="text-2xl font-semibold">Security</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-1 text-sm">
           Manage two-factor authentication and active sessions.
         </p>
       </div>
@@ -94,16 +94,16 @@ export default function SecuritySettingsPage() {
         <h2 className="text-lg font-medium">Two-factor authentication</h2>
 
         {session?.user?.twoFactorEnabled ? (
-          <div className="flex items-center justify-between rounded-md border border-border p-4">
+          <div className="border-border flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">2FA is enabled</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Your account requires a code from your authenticator app at sign-in.
               </p>
             </div>
             <button
               onClick={disable2fa}
-              className="rounded-md border border-border px-3 py-1.5 text-sm"
+              className="border-border min-h-11 shrink-0 rounded-md border px-3 text-sm sm:min-h-0 sm:py-1.5"
             >
               Disable
             </button>
@@ -111,24 +111,24 @@ export default function SecuritySettingsPage() {
         ) : enrollStep === "idle" ? (
           <button
             onClick={() => setEnrollStep("password")}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium"
           >
             Enable two-factor authentication
           </button>
         ) : enrollStep === "password" ? (
           <form onSubmit={startEnrollment} className="max-w-sm space-y-3">
-            <p className="text-sm text-muted-foreground">Confirm your password to continue.</p>
+            <p className="text-muted-foreground text-sm">Confirm your password to continue.</p>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className="border-border bg-background w-full rounded-md border px-3 py-2 text-sm"
             />
             {error && <p className="text-sm text-red-500">{error}</p>}
             <button
               type="submit"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium"
             >
               Continue
             </button>
@@ -137,20 +137,20 @@ export default function SecuritySettingsPage() {
           <form onSubmit={confirmEnrollment} className="max-w-sm space-y-4">
             {totpUri && (
               <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Scan this URI with your authenticator app (Google Authenticator, 1Password,
                   Authy):
                 </p>
-                <code className="block break-all rounded-md bg-muted p-2 text-xs">{totpUri}</code>
+                <code className="bg-muted block break-all rounded-md p-2 text-xs">{totpUri}</code>
               </div>
             )}
             {backupCodes && (
               <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Save these backup codes somewhere safe — each works once if you lose access to
                   your authenticator:
                 </p>
-                <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-2 text-xs font-mono">
+                <div className="bg-muted grid grid-cols-2 gap-1 rounded-md p-2 font-mono text-xs">
                   {backupCodes.map((c) => (
                     <span key={c}>{c}</span>
                   ))}
@@ -163,12 +163,12 @@ export default function SecuritySettingsPage() {
               placeholder="6-digit code"
               value={verifyCode}
               onChange={(e) => setVerifyCode(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-center text-lg tracking-widest"
+              className="border-border bg-background w-full rounded-md border px-3 py-2 text-center text-lg tracking-widest"
             />
             {error && <p className="text-sm text-red-500">{error}</p>}
             <button
               type="submit"
-              className="w-full rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground"
+              className="bg-primary text-primary-foreground w-full rounded-md py-2 text-sm font-medium"
             >
               Confirm & enable
             </button>
@@ -179,14 +179,14 @@ export default function SecuritySettingsPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-medium">Active sessions</h2>
         {loadingSessions ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-muted-foreground text-sm">Loading…</p>
         ) : (
-          <ul className="divide-y divide-border rounded-md border border-border">
+          <ul className="divide-border border-border divide-y rounded-md border">
             {sessions.map((s) => (
               <li key={s.id} className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm font-medium">{describeDevice(s.userAgent)}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {s.ipAddress ?? "Unknown IP"} · signed in{" "}
                     {new Date(s.createdAt).toLocaleDateString()}
                   </p>

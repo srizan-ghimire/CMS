@@ -80,7 +80,9 @@ function ConnectionsPageContent() {
         setWorkspaces(ws);
         setWorkspaceId((current) => current ?? ws[0]?.id ?? null);
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Couldn't load workspaces."));
+      .catch((err) =>
+        setError(err instanceof ApiError ? err.message : "Couldn't load workspaces."),
+      );
   }, []);
 
   const loadAccounts = useCallback(async () => {
@@ -143,7 +145,7 @@ function ConnectionsPageContent() {
     <div className="max-w-3xl space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">Connections</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-1 text-sm">
           Connect the Facebook Pages, Instagram Business accounts, and TikTok accounts this
           workspace publishes to.
         </p>
@@ -151,14 +153,14 @@ function ConnectionsPageContent() {
 
       {workspaces.length > 1 && (
         <div className="flex items-center gap-2">
-          <label htmlFor="workspace" className="text-sm text-muted-foreground">
+          <label htmlFor="workspace" className="text-muted-foreground text-sm">
             Workspace
           </label>
           <select
             id="workspace"
             value={workspaceId ?? ""}
             onChange={(e) => setWorkspaceId(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+            className="border-border bg-background rounded-md border px-3 py-1.5 text-sm"
           >
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
@@ -170,7 +172,7 @@ function ConnectionsPageContent() {
       )}
 
       {banner && (
-        <div className="flex items-start justify-between rounded-md border border-border bg-muted/40 p-3 text-sm">
+        <div className="border-border bg-muted/40 flex items-start justify-between rounded-md border p-3 text-sm">
           <span>{banner}</span>
           <button onClick={() => setBanner(null)} className="text-muted-foreground hover:underline">
             Dismiss
@@ -188,14 +190,14 @@ function ConnectionsPageContent() {
           <button
             onClick={() => connect("facebook")}
             disabled={connecting !== null || !workspaceId}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {connecting === "FACEBOOK" ? "Redirecting…" : "Connect Facebook & Instagram"}
           </button>
           <button
             onClick={() => connect("tiktok")}
             disabled={connecting !== null || !workspaceId}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="border-border rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {connecting === "TIKTOK" ? "Redirecting…" : "Connect TikTok"}
           </button>
@@ -205,17 +207,20 @@ function ConnectionsPageContent() {
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Connected accounts</h2>
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-muted-foreground text-sm">Loading…</p>
         ) : accounts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             No accounts connected yet. Connect Facebook to also pick up any linked Instagram
             Business account automatically.
           </p>
         ) : (
-          <ul className="divide-y divide-border rounded-md border border-border">
+          <ul className="divide-border border-border divide-y rounded-md border">
             {accounts.map((account) => (
-              <li key={account.id} className="flex items-center justify-between gap-4 p-4">
-                <div className="flex items-center gap-3">
+              <li
+                key={account.id}
+                className="flex flex-wrap items-center justify-between gap-3 p-4 sm:gap-4"
+              >
+                <div className="flex min-w-0 items-center gap-3">
                   {account.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -224,13 +229,13 @@ function ConnectionsPageContent() {
                       className="h-9 w-9 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                    <div className="bg-muted flex h-9 w-9 items-center justify-center rounded-full text-xs font-medium">
                       {PLATFORM_LABEL[account.platform].slice(0, 2)}
                     </div>
                   )}
                   <div>
                     <p className="text-sm font-medium">{account.displayName}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-muted-foreground text-xs">
                       {PLATFORM_LABEL[account.platform]}
                       {account.handle ? ` · @${account.handle}` : ""}
                     </p>
@@ -245,7 +250,7 @@ function ConnectionsPageContent() {
                   {canManage && account.platform === "TIKTOK" && (
                     <button
                       onClick={() => refresh(account.id)}
-                      className="text-xs text-muted-foreground hover:underline"
+                      className="text-muted-foreground text-xs hover:underline"
                     >
                       Refresh
                     </button>
@@ -270,7 +275,7 @@ function ConnectionsPageContent() {
 
 export default function ConnectionsPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+    <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
       <ConnectionsPageContent />
     </Suspense>
   );

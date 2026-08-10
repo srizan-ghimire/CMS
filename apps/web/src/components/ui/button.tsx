@@ -17,14 +17,21 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      // `min-h-11` (44px) up to the `sm` breakpoint, released above it. A 36px control is
+      // comfortable with a cursor and fiddly with a thumb, so the touch sizing is applied where
+      // touch actually happens rather than by resizing the desktop UI. `min-h` rather than `h` so
+      // it layers over the base height without either winning by specificity accident.
+      //
+      // `sm` and `xl` are left alone: `sm` is the deliberately dense variant (still well past the
+      // 24px WCAG 2.2 AA floor) and `xl` is already 48px.
       size: {
-        default: "h-9 px-4 py-2",
+        default: "h-9 min-h-11 px-4 py-2 sm:min-h-0",
         sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-6",
+        lg: "h-10 min-h-11 rounded-md px-6 sm:min-h-0",
         // Marketing-scale CTA. Square-cornered on purpose: it sits inside the rule grid on the
         // landing page, where a rounded edge would fight the ruling.
         xl: "h-12 rounded-none px-7 text-[0.9375rem] [&_svg]:size-[1.125rem]",
-        icon: "h-9 w-9",
+        icon: "h-9 min-h-11 w-9 min-w-11 sm:min-h-0 sm:min-w-0",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
@@ -32,8 +39,7 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }
 
