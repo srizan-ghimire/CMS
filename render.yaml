@@ -93,16 +93,23 @@ services:
         sync: false
 
       # --- Cloudflare R2 ---
-      - key: S3_ENDPOINT # https://<accountid>.r2.cloudflarestorage.com
+      # Endpoint shapes: R2 is https://<accountid>.r2.cloudflarestorage.com, Supabase Storage is
+      # https://<project-ref>.storage.supabase.co/storage/v1/s3.
+      - key: S3_ENDPOINT
         sync: false
+      # Backend-specific, so both are prompts rather than literals — a `value:` here is re-applied
+      # on every blueprint sync and would silently revert whatever you set in the dashboard.
+      # R2 wants the literal "auto"; Supabase validates the region baked into the SigV4 credential
+      # scope, so it needs the project's real region or every PUT is 403 SignatureDoesNotMatch.
       - key: S3_REGION
-        value: auto
+        sync: false
       - key: S3_ACCESS_KEY_ID
         sync: false
       - key: S3_SECRET_ACCESS_KEY
         sync: false
+      # Must equal the real bucket name; a mismatch presigns fine and 404s on the PUT.
       - key: S3_BUCKET
-        value: social-platform-media
+        sync: false
       - key: S3_FORCE_PATH_STYLE
         value: "true"
       # S3_PUBLIC_URL is deliberately absent. R2 signs the Host header, so a presigned URL cannot

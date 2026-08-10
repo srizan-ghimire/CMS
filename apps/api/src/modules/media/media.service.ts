@@ -73,19 +73,20 @@ export class MediaService {
     const type = mediaTypeForMime(input.mimeType);
     if (!type) throw new BadRequestException(`Unsupported file type: ${input.mimeType}`);
 
+    if (input.folderId) await this.assertFolderInWorkspace(input.folderId, input.workspaceId);
+
     // Content-addressed dedupe: the same bytes uploaded twice into one workspace reuse the row
     // instead of duplicating the object in storage.
+    //
+    // This lookup must match @@unique([workspaceId, checksum]), which is unconditional. Narrowing
+    // it to READY + non-deleted rows hides the ones that still hold the slot — above all an
+    // UPLOADING row from a presign whose PUT never completed. The retry then fell through to
+    // create() and died with P2002, surfacing as a 500 on every subsequent attempt at that file.
     if (input.checksum) {
-      const existing = await this.prisma.mediaAsset.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          checksum: input.checksum,
-          deletedAt: null,
-          status: MediaStatus.READY,
-        },
-        include: ASSET_INCLUDE,
-      });
-      if (existing) {
+      const existing = await this.findByChecksum(input.workspaceId, input.checksum);
+
+      // Only a READY, live asset is a genuine duplicate — there are usable bytes behind it.
+      if (existing && existing.status === MediaStatus.READY && !existing.deletedAt) {
         return {
           assetId: existing.id,
           storageKey: existing.storageKey,
@@ -94,29 +95,44 @@ export class MediaService {
           duplicateOf: this.toDto(existing),
         };
       }
-    }
 
-    if (input.folderId) await this.assertFolderInWorkspace(input.folderId, input.workspaceId);
+      if (existing) return this.reissueUpload(existing, input, userId, type);
+    }
 
     const assetId = createAssetId();
     const storageKey = buildStorageKey(input.workspaceId, assetId, input.fileName);
 
-    const asset = await this.prisma.mediaAsset.create({
-      data: {
-        id: assetId,
-        workspaceId: input.workspaceId,
-        folderId: input.folderId ?? null,
-        uploadedById: userId,
-        type,
-        status: MediaStatus.UPLOADING,
-        storageKey,
-        url: this.storage.publicUrl(storageKey),
-        mimeType: input.mimeType,
-        fileName: input.fileName,
-        sizeBytes: input.sizeBytes,
-        checksum: input.checksum ?? null,
-      },
-    });
+    let asset: MediaAsset;
+    try {
+      asset = await this.prisma.mediaAsset.create({
+        data: {
+          id: assetId,
+          workspaceId: input.workspaceId,
+          folderId: input.folderId ?? null,
+          uploadedById: userId,
+          type,
+          status: MediaStatus.UPLOADING,
+          storageKey,
+          url: this.storage.publicUrl(storageKey),
+          mimeType: input.mimeType,
+          fileName: input.fileName,
+          sizeBytes: input.sizeBytes,
+          checksum: input.checksum ?? null,
+        },
+      });
+    } catch (err) {
+      // Two presigns for the same bytes can interleave between the lookup above and this insert —
+      // dropping one file twice into the batch uploader is enough. The loser gets P2002; hand it
+      // the winner's row instead of a 500.
+      const winner =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002" &&
+        input.checksum
+          ? await this.findByChecksum(input.workspaceId, input.checksum)
+          : null;
+      if (!winner) throw err;
+      return this.reissueUpload(winner, input, userId, type);
+    }
 
     const uploadUrl = await this.storage.presignPut(storageKey, input.mimeType);
 
@@ -125,6 +141,59 @@ export class MediaService {
       storageKey,
       uploadUrl,
       // SigV4 signs Content-Type, so the PUT must send exactly this value or storage rejects it.
+      requiredHeaders: { "Content-Type": input.mimeType },
+      duplicateOf: null,
+    };
+  }
+
+  /** Reads the row occupying the `(workspaceId, checksum)` unique slot, whatever state it is in. */
+  private findByChecksum(
+    workspaceId: string,
+    checksum: string,
+  ): Promise<AssetWithVariants | null> {
+    return this.prisma.mediaAsset.findUnique({
+      where: { workspaceId_checksum: { workspaceId, checksum } },
+      include: ASSET_INCLUDE,
+    });
+  }
+
+  /**
+   * Re-issue an upload against a row that already owns this workspace's `(workspaceId, checksum)`
+   * slot but has nothing usable behind it: an abandoned UPLOADING row, a FAILED conversion, or a
+   * soft-deleted asset being re-uploaded. Reviving is the only option — the unique constraint
+   * leaves no way to insert alongside it, and the row cannot be hard-deleted because a PUBLISHED
+   * PostTarget may reference it.
+   *
+   * `storageKey` is deliberately left as it is. It is the asset's stable identity, the checksum
+   * already guarantees the bytes are identical, and re-keying would strand whatever object a
+   * soft-deleted row still has in the bucket.
+   */
+  private async reissueUpload(
+    existing: MediaAsset,
+    input: PresignUploadInput,
+    userId: string,
+    type: MediaType,
+  ): Promise<PresignUploadResponse> {
+    const revived = await this.prisma.mediaAsset.update({
+      where: { id: existing.id },
+      data: {
+        folderId: input.folderId ?? null,
+        uploadedById: userId,
+        type,
+        status: MediaStatus.UPLOADING,
+        mimeType: input.mimeType,
+        fileName: input.fileName,
+        sizeBytes: input.sizeBytes,
+        processingError: null,
+        uploadedAt: null,
+        deletedAt: null,
+      },
+    });
+
+    return {
+      assetId: revived.id,
+      storageKey: revived.storageKey,
+      uploadUrl: await this.storage.presignPut(revived.storageKey, input.mimeType),
       requiredHeaders: { "Content-Type": input.mimeType },
       duplicateOf: null,
     };
