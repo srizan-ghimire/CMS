@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PostStatus, PostTargetStatus, Prisma } from "@prisma/client";
+import { isPostEditable } from "@social-platform/shared";
 import { RRule } from "rrule";
 import { PrismaService } from "../../prisma/prisma.service";
 import { WorkspacesService } from "../workspaces/workspaces.service";
@@ -94,9 +95,15 @@ export class SchedulingService {
     if (!post) throw new NotFoundException("Post not found.");
     await this.workspaces.assertMembership(post.workspaceId, userId, PUBLISH_ROLES);
 
-    if (post.status === PostStatus.PUBLISHED || post.status === PostStatus.PUBLISHING) {
+    // Deliberately the shared helper rather than a hand-written status list. The previous check
+    // named PUBLISHED and PUBLISHING but not PARTIALLY_PUBLISHED, so a post that had already gone
+    // out to some of its networks could be dragged to a new date on the calendar: this method then
+    // reset it to SCHEDULED and put its targets back to PENDING, rewriting a delivery record that
+    // had genuinely happened. LOCKED_POST_STATUSES covers all three, and keeping one definition
+    // means the next status added to it is enforced here for free.
+    if (!isPostEditable(post.status)) {
       throw new BadRequestException(
-        "A post that is publishing or already published cannot be moved.",
+        "A post that is publishing, published, or partially published cannot be moved.",
       );
     }
     if (scheduledAt && scheduledAt.getTime() < Date.now() - DUE_WINDOW_MS) {

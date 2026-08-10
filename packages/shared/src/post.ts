@@ -35,6 +35,32 @@ export const postTargetInputSchema = z.object({
 }).strict();
 export type PostTargetInput = z.infer<typeof postTargetInputSchema>;
 
+/**
+ * Both of these arrays are written straight into join tables that carry a unique constraint —
+ * `PostMedia @@unique([postId, mediaAssetId])` and `PostTarget @@unique([postId, socialAccountId])`.
+ * A repeated id therefore reaches Postgres as a duplicate key, and P2002 surfaces through
+ * AllExceptionsFilter as an opaque 500 rather than anything the caller can act on.
+ *
+ * Rejecting it here makes it a 400 that names the field, on both sides of the wire: the composer's
+ * resolver refuses before sending, and the API refuses if something else does. Silently
+ * de-duplicating was the alternative and was rejected for the reason `.strict()` exists on these
+ * schemas — a malformed request should fail loudly rather than be quietly repaired into something
+ * the caller did not ask for.
+ */
+const isDistinct = (values: string[]) => new Set(values).size === values.length;
+
+const mediaAssetIdsSchema = z
+  .array(z.string().cuid())
+  .max(35)
+  .refine(isDistinct, { message: "The same media asset cannot be attached twice." });
+
+const targetsSchema = z
+  .array(postTargetInputSchema)
+  .max(50)
+  .refine((targets) => isDistinct(targets.map((t) => t.socialAccountId)), {
+    message: "The same account cannot be targeted twice.",
+  });
+
 export const createPostSchema = z.object({
   workspaceId: z.string().cuid(),
   title: z.string().max(200).nullish(),
@@ -44,8 +70,8 @@ export const createPostSchema = z.object({
   contentJson: z.unknown().nullish(),
   firstComment: z.string().max(2_200).nullish(),
   /** Ordered — carousel sequence is meaningful. */
-  mediaAssetIds: z.array(z.string().cuid()).max(35).default([]),
-  targets: z.array(postTargetInputSchema).max(50).default([]),
+  mediaAssetIds: mediaAssetIdsSchema.default([]),
+  targets: targetsSchema.default([]),
   scheduledAt: z.string().datetime().nullish(),
   timezone: z.string().default("UTC"),
   campaignId: z.string().cuid().nullish(),
@@ -68,8 +94,8 @@ export const updatePostSchema = z
     content: z.string().max(63_206).optional(),
     contentJson: z.unknown().nullish(),
     firstComment: z.string().max(2_200).nullish(),
-    mediaAssetIds: z.array(z.string().cuid()).max(35).optional(),
-    targets: z.array(postTargetInputSchema).max(50).optional(),
+    mediaAssetIds: mediaAssetIdsSchema.optional(),
+    targets: targetsSchema.optional(),
     scheduledAt: z.string().datetime().nullish(),
     timezone: z.string().optional(),
     campaignId: z.string().cuid().nullish(),

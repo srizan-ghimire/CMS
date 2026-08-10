@@ -288,10 +288,14 @@ export class OrganizationService {
     if (!template) throw new NotFoundException("Template not found.");
     await this.workspaces.assertMembership(template.workspaceId, userId, CONTENT_MANAGE_ROLES);
 
-    const updated = await this.prisma.postTemplate.update({
-      where: { id: templateId },
-      data: {
-        ...(input.name !== undefined ? { name: input.name } : {}),
+    // Wrapped for the same reason createTemplate is: PostTemplate carries
+    // @@unique([workspaceId, name]), so renaming onto an existing name is a P2002 and would
+    // otherwise reach the client as an opaque 500.
+    try {
+      const updated = await this.prisma.postTemplate.update({
+        where: { id: templateId },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.category !== undefined ? { category: input.category } : {}),
         ...(input.content !== undefined
@@ -303,10 +307,15 @@ export class OrganizationService {
                 input.contentJson === null ? Prisma.DbNull : (input.contentJson as Prisma.InputJsonValue),
             }
           : {}),
-        ...(input.defaultPlatforms !== undefined ? { defaultPlatforms: input.defaultPlatforms } : {}),
-      },
-    });
-    return this.toTemplateDto(updated);
+          ...(input.defaultPlatforms !== undefined
+            ? { defaultPlatforms: input.defaultPlatforms }
+            : {}),
+        },
+      });
+      return this.toTemplateDto(updated);
+    } catch (err) {
+      throw this.conflictOrRethrow(err, "A template with that name already exists.");
+    }
   }
 
   async deleteTemplate(templateId: string, userId: string): Promise<void> {
@@ -415,14 +424,19 @@ export class OrganizationService {
     if (!snippet) throw new NotFoundException("Snippet not found.");
     await this.workspaces.assertMembership(snippet.workspaceId, userId, CONTENT_MANAGE_ROLES);
 
-    const updated = await this.prisma.snippet.update({ where: { id: snippetId }, data: input });
-    return {
-      id: updated.id,
-      name: updated.name,
-      kind: updated.kind,
-      body: updated.body,
-      createdAt: updated.createdAt.toISOString(),
-    };
+    // Snippet carries @@unique([workspaceId, name]) too, so a rename collision is P2002.
+    try {
+      const updated = await this.prisma.snippet.update({ where: { id: snippetId }, data: input });
+      return {
+        id: updated.id,
+        name: updated.name,
+        kind: updated.kind,
+        body: updated.body,
+        createdAt: updated.createdAt.toISOString(),
+      };
+    } catch (err) {
+      throw this.conflictOrRethrow(err, "A snippet with that name already exists.");
+    }
   }
 
   async deleteSnippet(snippetId: string, userId: string): Promise<void> {

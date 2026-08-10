@@ -64,7 +64,17 @@ export class ApprovalsService {
       },
     });
 
-    const versionNumber = post.currentVersion;
+    // Claim the number by incrementing first and using what comes back, rather than reading
+    // `post.currentVersion` and writing it. The read-then-write order let two concurrent edits —
+    // two tabs on one draft, or two collaborators — both see version N and collide on
+    // @@unique([postId, versionNumber]), turning a routine save into a 500. The UPDATE takes a row
+    // lock, so the second transaction blocks here and resumes with N+1.
+    const { currentVersion: nextVersion } = await tx.post.update({
+      where: { id: postId },
+      data: { currentVersion: { increment: 1 } },
+      select: { currentVersion: true },
+    });
+    const versionNumber = nextVersion - 1;
 
     // The snapshot is the whole post, not just its text: restoring content alone would silently
     // drop the media order and per-platform overrides that make the version meaningful.
@@ -99,11 +109,6 @@ export class ApprovalsService {
         changeSummary: changeSummary ?? null,
         editedById,
       },
-    });
-
-    await tx.post.update({
-      where: { id: postId },
-      data: { currentVersion: { increment: 1 } },
     });
 
     return versionNumber;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 import { toast } from "sonner";
+import { isPostEditable } from "@social-platform/shared";
 import type { PostStatus, PostTargetStatus } from "@social-platform/shared";
 import { apiClient, toQuery } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
@@ -236,7 +237,10 @@ export default function CalendarPage() {
                       <button
                         key={entry.postId}
                         type="button"
-                        draggable={canSchedule && entry.status !== "PUBLISHED"}
+                        // Same rule the API enforces. Testing `!== "PUBLISHED"` let a
+                        // PARTIALLY_PUBLISHED post be dragged, which the server now rejects —
+                        // sharing the helper keeps the affordance and the rule from drifting.
+                        draggable={canSchedule && isPostEditable(entry.status)}
                         onDragStart={() => setDragging(entry)}
                         onClick={() => setSelected(entry)}
                         className={cn(

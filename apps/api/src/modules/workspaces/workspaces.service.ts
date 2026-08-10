@@ -263,18 +263,26 @@ export class WorkspacesService {
     await this.assertMembership(workspaceId, userId, ADMIN_ROLES);
 
     const email = input.email.toLowerCase();
+
+    const workspace = await this.prisma.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+      select: { name: true, ownerId: true },
+    });
+
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     if (existingUser) {
+      // The owner is an implicit OWNER without a WorkspaceMember row (see assertMembership), so a
+      // membership lookup alone does not see them. Without this, an owner could be invited to
+      // their own workspace and, on accepting, gain a real member row at a *lower* role than the
+      // ownership they already hold — two disagreeing sources of authority for one person.
+      if (existingUser.id === workspace.ownerId) {
+        throw new ConflictException("That person owns this workspace.");
+      }
       const already = await this.prisma.workspaceMember.findUnique({
         where: { workspaceId_userId: { workspaceId, userId: existingUser.id } },
       });
       if (already) throw new ConflictException("That person is already a member.");
     }
-
-    const workspace = await this.prisma.workspace.findUniqueOrThrow({
-      where: { id: workspaceId },
-      select: { name: true },
-    });
 
     // Upsert so re-inviting the same address refreshes the token instead of colliding on the
     // (workspaceId, email) unique constraint.
