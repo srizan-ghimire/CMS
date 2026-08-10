@@ -24,7 +24,53 @@ interface SendMailInput {
   html: string;
 }
 
+const RESEND_ENDPOINT = "https://api.resend.com/emails";
+
+/**
+ * Resend over HTTPS.
+ *
+ * Preferred in any hosted environment because PaaS providers routinely block outbound SMTP —
+ * Render blocks 25, 465 and 587 — and the failure mode is the worst kind: the TCP connect times
+ * out after ~2 minutes with `ETIMEDOUT` on `CONN`, inside a Better Auth background task, so signup
+ * appears to succeed and no verification email ever arrives. Port 443 is never blocked, and a
+ * rejected send comes back immediately with a reason.
+ */
+async function sendViaResend({ to, subject, html }: SendMailInput): Promise<void> {
+  const response = await fetch(RESEND_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: process.env.SMTP_FROM ?? "no-reply@socialplatform.dev",
+      to,
+      subject,
+      html,
+    }),
+    // Bounded so a hung request cannot pin a Better Auth background task open indefinitely.
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    // Resend's body names the cause — an unverified sending domain, or a `from` on a domain other
+    // than the verified one — and neither is guessable from the status code alone.
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Resend rejected the message (${response.status}): ${detail.slice(0, 300)}`);
+  }
+}
+
+/**
+ * Transport selection is by configuration, not by environment name: set RESEND_API_KEY and mail
+ * goes over HTTPS, leave it unset and it goes over SMTP. Local development needs the SMTP path —
+ * Mailhog only speaks SMTP — so this cannot simply become "HTTP in production".
+ */
 export async function sendMail({ to, subject, html }: SendMailInput): Promise<void> {
+  if (process.env.RESEND_API_KEY) {
+    await sendViaResend({ to, subject, html });
+    return;
+  }
+
   await transporter.sendMail({
     from: process.env.SMTP_FROM ?? "no-reply@socialplatform.dev",
     to,

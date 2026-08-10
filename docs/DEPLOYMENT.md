@@ -187,16 +187,30 @@ Then the variables:
 Verify your sending domain, create an API key, then:
 
 ```
-SMTP_HOST=smtp.resend.com
-SMTP_PORT=587
-SMTP_SECURE=false          # 587 is STARTTLS; only 465 is implicit TLS
-SMTP_USER=resend
-SMTP_PASS=<your API key>
-SMTP_FROM=no-reply@example.com
+RESEND_API_KEY=<your API key>
+SMTP_FROM=no-reply@example.com     # must be on the domain you verified
 ```
 
+That is the whole configuration. `RESEND_API_KEY` switches
+[lib/email.ts](../apps/api/src/modules/auth/lib/email.ts) to Resend's HTTPS API and every `SMTP_*`
+value is ignored.
+
+> **Do not use SMTP on Render.** Render blocks outbound connections on ports 25, 465 and 587, and
+> the failure is silent in the worst way: the TCP connect times out after ~2 minutes with
+> `ETIMEDOUT` on `CONN`, inside a Better Auth *background task*. Signup returns 200, the user waits
+> for a verification email, and nothing was ever sent. Port 443 is not blocked.
+
+If you are deploying somewhere that permits SMTP, leave `RESEND_API_KEY` unset and the `SMTP_*`
+settings take over. Resend also answers on **2465/2587** for hosts that block the standard ports —
+`SMTP_PORT=2587` with `SMTP_SECURE=false` (STARTTLS), or 2465 with `SMTP_SECURE=true` (implicit
+TLS). Local development leaves the key unset and talks to Mailhog, which only speaks SMTP.
+
 Signup is gated by `requireEmailVerification: true`, so a broken transport means nobody can create
-an account. The config schema rejects a loopback `SMTP_HOST` in production for that reason.
+an account. The config schema rejects a loopback `SMTP_HOST` in production for that reason — unless
+`RESEND_API_KEY` is set, in which case the SMTP settings are unused and the check is skipped.
+
+**Without a verified domain**, Resend only delivers to the address you signed up with. That is
+enough to demo the app as a single user, and nothing else will work until a domain is verified.
 
 ## 6. Deploy the blueprint
 
@@ -309,6 +323,8 @@ Work through these in order — each one proves a distinct piece of the configur
 |---|---|
 | `/dashboard` redirect-loops to `/login` despite a valid session | Cookie not visible on the web origin. Set `AUTH_COOKIE_DOMAIN` to the shared parent, or switch to the same-origin proxy. |
 | API refuses to start, naming `MEDIA_PUBLIC_BASE_URL` | Working as intended — set it, or you would be fake-publishing. |
+| Signup succeeds but no verification email; logs show `ETIMEDOUT` on `CONN` from nodemailer | Outbound SMTP is blocked (Render blocks 25/465/587). Set `RESEND_API_KEY` to send over HTTPS. The send happens in a Better Auth background task, so the signup request itself still returns 200. |
+| Resend returns 403 on send | `SMTP_FROM` is not on the verified domain — `no-reply@example.com` fails if you verified `send.example.com`. |
 | `SignatureDoesNotMatch` on upload | `S3_PUBLIC_URL` is set on R2. Unset it; use `S3_PUBLIC_READ_URL`. |
 | `Upload failed — check the storage CORS configuration` | R2 bucket CORS missing, or `Content-Type` absent from `AllowedHeaders`. |
 | 401 on every API call | Origin missing from `TRUSTED_ORIGINS`, or a `SameSite`/`Secure` mismatch. |

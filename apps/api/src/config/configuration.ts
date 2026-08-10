@@ -87,6 +87,13 @@ const baseSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default("no-reply@socialplatform.dev"),
 
+  // Set this and mail goes out over Resend's HTTPS API instead of SMTP; leave it unset and the
+  // SMTP_* settings above are used. Not merely a preference on a PaaS: Render blocks outbound 25,
+  // 465 and 587, so SMTP there fails with ETIMEDOUT on CONN inside a Better Auth background task —
+  // signup looks successful and no verification mail is ever sent. Local dev leaves this unset
+  // because Mailhog only speaks SMTP.
+  RESEND_API_KEY: z.string().optional(),
+
   FACEBOOK_APP_ID: z.string().default(""),
   FACEBOOK_APP_SECRET: z.string().default(""),
   FACEBOOK_GRAPH_VERSION: z.string().default("v23.0"),
@@ -149,11 +156,14 @@ const envSchema = baseSchema.superRefine((v, ctx) => {
         "verification and password-reset links point at localhost.",
     );
   }
-  if (isLoopback(v.SMTP_HOST)) {
+  // Skipped when RESEND_API_KEY is set: mail then goes over HTTPS and the SMTP settings are unused,
+  // so a leftover localhost host is harmless rather than fatal.
+  if (!v.RESEND_API_KEY && isLoopback(v.SMTP_HOST)) {
     reject(
       "SMTP_HOST",
-      "requireEmailVerification is enabled, so a real SMTP host is required in production — " +
-        "otherwise no account can ever complete signup.",
+      "requireEmailVerification is enabled, so production needs a real mail transport — otherwise " +
+        "no account can ever complete signup. Set RESEND_API_KEY to send over HTTPS (required on " +
+        "hosts that block outbound SMTP, Render among them), or point SMTP_HOST at a real server.",
     );
   }
   if (v.AUTH_COOKIE_SAME_SITE === "none" && !v.API_URL.startsWith("https://")) {
@@ -227,6 +237,8 @@ export default () => ({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
     from: process.env.SMTP_FROM ?? "no-reply@socialplatform.dev",
+    // Present means lib/email.ts sends over HTTPS and ignores every SMTP field above.
+    resendApiKey: process.env.RESEND_API_KEY,
   },
   storage: {
     endpoint: process.env.S3_ENDPOINT,

@@ -128,18 +128,26 @@ services:
       - key: MEDIA_SIGNED_URL_TTL_SECONDS
         value: "3600"
 
-      # --- SMTP. requireEmailVerification is on, so signup is impossible without this. ---
+      # --- Mail. requireEmailVerification is on, so signup is impossible without a working
+      # transport. Use the HTTPS path here: Render blocks outbound SMTP on 25, 465 and 587, and the
+      # failure is silent — the connect times out with ETIMEDOUT inside a Better Auth background
+      # task, so signup returns 200 and the verification mail simply never exists.
+      - key: RESEND_API_KEY # set this and every SMTP_* value below is ignored
+        sync: false
+      - key: SMTP_FROM # must be on a domain verified with Resend
+        sync: false
+
+      # Fallback SMTP settings, used only when RESEND_API_KEY is empty. Resend also answers on
+      # 2465/2587 for hosts that block the standard ports, if you would rather stay on SMTP.
       - key: SMTP_HOST
         value: smtp.resend.com
       - key: SMTP_PORT
-        value: "587"
+        value: "2587"
       - key: SMTP_SECURE
         value: "false"
       - key: SMTP_USER
         value: resend
-      - key: SMTP_PASS # the Resend API key
-        sync: false
-      - key: SMTP_FROM # must be on a domain verified with Resend
+      - key: SMTP_PASS # the Resend API key again, as an SMTP password
         sync: false
 
       # --- Social OAuth ---
