@@ -61,15 +61,14 @@ export default function RegisterPage() {
         title="Check your email."
         subtitle={
           <>
-            We sent a verification link to{" "}
-            <span className="text-foreground">{submittedEmail}</span>. Confirm it and you can sign
-            in.
+            We sent a verification link to <span className="text-foreground">{submittedEmail}</span>
+            . Confirm it and you can sign in.
           </>
         }
       >
-        <div className="border border-dashed border-border p-5">
-          <MailCheck className="h-5 w-5 text-muted-foreground" />
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        <div className="border-border border border-dashed p-5">
+          <MailCheck className="text-muted-foreground h-5 w-5" />
+          <p className="text-muted-foreground mt-3 text-sm leading-relaxed">
             Nothing arrived? Check your spam folder. The link is valid for one hour — after that,
             send yourself a new one.
           </p>
@@ -77,7 +76,7 @@ export default function RegisterPage() {
             type="button"
             onClick={resend}
             disabled={resendState === "sending" || resendState === "sent"}
-            className="marker mt-4 text-foreground underline underline-offset-4 disabled:no-underline disabled:opacity-60"
+            className="marker text-foreground mt-4 underline underline-offset-4 disabled:no-underline disabled:opacity-60"
           >
             {resendState === "sending"
               ? "Sending…"
@@ -102,7 +101,7 @@ export default function RegisterPage() {
       title="Start publishing."
       subtitle="One composer for every network you run. No card required."
       footer={
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Already have an account?{" "}
           <Link href="/login" className="text-foreground underline underline-offset-4">
             Sign in
@@ -117,7 +116,13 @@ export default function RegisterPage() {
         </Field>
 
         <Field id="email" label="Email" error={errors.email?.message}>
-          <Input id="email" type="email" autoComplete="email" className="h-11" {...register("email")} />
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            className="h-11"
+            {...register("email")}
+          />
         </Field>
 
         <Field
@@ -136,7 +141,7 @@ export default function RegisterPage() {
         </Field>
 
         {formError && (
-          <p className="border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <p className="border-destructive/40 bg-destructive/5 text-destructive border px-3 py-2 text-sm">
             {formError}
           </p>
         )}
@@ -144,6 +149,21 @@ export default function RegisterPage() {
         <Button type="submit" size="xl" disabled={isSubmitting} className="w-full">
           {isSubmitting ? "Creating account…" : "Create account"}
         </Button>
+
+        {/* Placed above the social buttons as well as the form submit, so it covers both routes
+            into an account. Both documents are linked because agreeing to terms you were never
+            shown is not agreement. */}
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="hover:text-foreground underline underline-offset-4">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="hover:text-foreground underline underline-offset-4">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </form>
 
       {/* Social sign-up skips email verification entirely — the provider has already proven the
