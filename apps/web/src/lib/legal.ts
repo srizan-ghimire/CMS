@@ -55,21 +55,6 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     data: "Everything in transit through the app, plus request logs containing IP addresses",
   },
   {
-    name: "Supabase",
-    purpose: "Database and file storage",
-    data: "All account, workspace and content records; uploaded media and its derived thumbnails",
-  },
-  {
-    name: "Resend",
-    purpose: "Transactional email",
-    data: "Email address and the contents of verification, password-reset and invitation messages",
-  },
-  {
-    name: "Cloudflare",
-    purpose: "DNS and reverse proxy",
-    data: "Connection metadata — IP address, user agent — for requests to the site",
-  },
-  {
     name: "Meta (Facebook, Instagram)",
     purpose: "Publishing and account details, only for accounts you connect",
     data: "Post content and media you choose to publish; Page and Instagram account identifiers",
@@ -78,10 +63,5 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     name: "TikTok",
     purpose: "Publishing and account details, only for accounts you connect",
     data: "Video content you choose to publish; your TikTok profile identifiers",
-  },
-  {
-    name: "Anthropic",
-    purpose: "Caption assistant — only when that feature is enabled for your workspace",
-    data: "The post text you ask it to rewrite. Nothing is sent unless you use the feature.",
   },
 ];
